@@ -27,7 +27,7 @@ export default function PrivacyPolicyPage() {
           <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
           <div>
             <strong>คำชี้แจงสำหรับองค์กรผู้ใช้งาน:</strong> ข้อความนี้เป็นโครงสร้างตัวอย่างตั้งต้นเพื่อให้แต่ละองค์กรนำไปปรับแก้ตามนโยบายและการประมวลผลข้อมูลจริงของท่าน
-            ระบบ PdhFeedback ไม่ได้ให้คำปรึกษาทางกฎหมายหรือรับรองผลการปฏิบัติตามกฎหมายแทนองค์กร
+            ระบบ Tomvisfeedback ไม่ได้ให้คำปรึกษาทางกฎหมายหรือรับรองผลการปฏิบัติตามกฎหมายแทนองค์กร
           </div>
         </div>
 
@@ -35,7 +35,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-base font-bold text-slate-800 mb-1">1. ข้อมูลที่เราเก็บรวบรวม</h2>
             <p>
-              ระบบ PdhFeedback ออกแบบมาเพื่อให้ผู้รับบริการสามารถประเมินความพึงพอใจได้โดยไม่ต้องระบุตัวตน (Anonymous by Default)
+              ระบบ Tomvisfeedback ออกแบบมาเพื่อให้ผู้รับบริการสามารถประเมินความพึงพอใจได้โดยไม่ต้องระบุตัวตน (Anonymous by Default)
               ข้อมูลที่จัดเก็บหลักประกอบด้วย:
             </p>
             <ul className="list-disc pl-5 space-y-1">

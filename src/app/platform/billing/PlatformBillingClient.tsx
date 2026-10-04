@@ -213,7 +213,7 @@ export default function PlatformBillingClient({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-base font-bold tracking-tight block">
-                PdhFeedback Platform Billing Console
+                Tomvisfeedback Platform Billing Console
               </span>
               <span
                 className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${

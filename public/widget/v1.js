@@ -74,13 +74,17 @@
     if (el.dataset.pdhInitialized === "true") return;
 
     var embedId =
+      el.getAttribute("data-tomvisfeedback-widget") ||
+      el.getAttribute("data-tomvisfeedback-embed") ||
       el.getAttribute("data-pdhfeedback-widget") ||
       el.getAttribute("data-pdhfeedback-embed") ||
       el.getAttribute("data-embed-id");
 
     if (!embedId) {
       if (currentScript) {
-        embedId = currentScript.getAttribute("data-pdhfeedback-embed");
+        embedId =
+          currentScript.getAttribute("data-tomvisfeedback-embed") ||
+          currentScript.getAttribute("data-pdhfeedback-embed");
       }
     }
 
@@ -240,7 +244,9 @@
 
   // Scan and initialize widgets on DOM load
   function scanAndInit() {
-    var widgetEls = document.querySelectorAll("[data-pdhfeedback-widget], [data-pdhfeedback-embed]");
+    var widgetEls = document.querySelectorAll(
+      "[data-tomvisfeedback-widget], [data-tomvisfeedback-embed], [data-pdhfeedback-widget], [data-pdhfeedback-embed]"
+    );
     for (var i = 0; i < widgetEls.length; i++) {
       initWidgetElement(widgetEls[i]);
     }
@@ -257,7 +263,10 @@
     // Basic origin and data validation
     if (!event.data || typeof event.data !== "object") return;
     var data = event.data;
-    if (!data.type || data.type.indexOf("pdhfeedback:") !== 0) return;
+    var isSupportedType =
+      data.type &&
+      (data.type.indexOf("tomvisfeedback:") === 0 || data.type.indexOf("pdhfeedback:") === 0);
+    if (!isSupportedType) return;
 
     var pubId = data.publicationId;
     if (!pubId || !instances[pubId]) return;
@@ -278,8 +287,10 @@
       return;
     }
 
-    switch (data.type) {
-      case "pdhfeedback:resize":
+    var action = data.type.replace(/^(tomvisfeedback:|pdhfeedback:)/, "");
+
+    switch (action) {
+      case "resize":
         if (typeof data.height === "number" && inst.iframe) {
           // Clamp height to prevent layout exploitation
           var clampedHeight = Math.max(320, Math.min(1400, data.height));
@@ -287,14 +298,12 @@
         }
         break;
 
-      case "pdhfeedback:submitted":
+      case "submitted":
         // Dispatch custom DOM event on container so host page scripts can respond
         try {
-          var customEvent = new CustomEvent("pdhfeedback:submitted", {
-            detail: { publicationId: pubId, timestamp: data.timestamp || Date.now() },
-            bubbles: true,
-          });
-          inst.container.dispatchEvent(customEvent);
+          var detail = { publicationId: pubId, timestamp: data.timestamp || Date.now() };
+          inst.container.dispatchEvent(new CustomEvent("tomvisfeedback:submitted", { detail: detail, bubbles: true }));
+          inst.container.dispatchEvent(new CustomEvent("pdhfeedback:submitted", { detail: detail, bubbles: true }));
         } catch (e) {}
 
         // Auto-close dialog after 2.5s if in dialog mode
@@ -305,19 +314,17 @@
         }
         break;
 
-      case "pdhfeedback:close":
+      case "close":
         if (inst.mode === "dialog" && typeof inst.closeDialog === "function") {
           inst.closeDialog();
         }
         break;
 
-      case "pdhfeedback:error":
+      case "error":
         try {
-          var errEvent = new CustomEvent("pdhfeedback:error", {
-            detail: { publicationId: pubId, code: data.code || "UNKNOWN_ERROR" },
-            bubbles: true,
-          });
-          inst.container.dispatchEvent(errEvent);
+          var errDetail = { publicationId: pubId, code: data.code || "UNKNOWN_ERROR" };
+          inst.container.dispatchEvent(new CustomEvent("tomvisfeedback:error", { detail: errDetail, bubbles: true }));
+          inst.container.dispatchEvent(new CustomEvent("pdhfeedback:error", { detail: errDetail, bubbles: true }));
         } catch (e) {}
         break;
     }

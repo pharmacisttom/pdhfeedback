@@ -249,7 +249,7 @@ export async function GET(
   <div class="sheet">
     <div class="header">
       <div>
-        <h1 class="brand-title">PdhFeedback</h1>
+        <h1 class="brand-title">Tomvisfeedback</h1>
         <p class="brand-sub">ระบบประเมินความพึงพอใจการบริการ Multi-tenant SaaS</p>
         <p class="brand-sub">ผู้ให้บริการ: บจก. ทอมวิส ดิจิทัล (Tomvis Digital Co., Ltd.)</p>
         <p class="brand-sub">เลขประจำตัวผู้เสียภาษี: 0105566012345</p>
@@ -290,7 +290,7 @@ export async function GET(
         <tr>
           <td>1</td>
           <td>
-            <strong>ค่าบริการระบบ PdhFeedback SaaS (${order.planNameSnapshot})</strong>
+            <strong>ค่าบริการระบบ Tomvisfeedback SaaS (${order.planNameSnapshot})</strong>
             <div style="font-size: 12px; color: #64748b; margin-top: 4px;">
               แพ็กเกจ ${order.planCodeSnapshot} - สิทธิ์ใช้งานจุดบริการ, แบบประเมิน และโควตาคำตอบตามเงื่อนไข
             </div>
@@ -319,7 +319,7 @@ export async function GET(
     </div>
 
     <div class="footer-note">
-      * เอกสารนี้เป็นหลักฐานการรับชำระเงินค่าบริการระบบ PdhFeedback ที่ออกโดยอัตโนมัติจากระบบอิเล็กทรอนิกส์<br>
+      * เอกสารนี้เป็นหลักฐานการรับชำระเงินค่าบริการระบบ Tomvisfeedback ที่ออกโดยอัตโนมัติจากระบบอิเล็กทรอนิกส์<br>
       หากต้องการใบกำกับภาษีเต็มรูปแบบ กรุณาติดต่อฝ่ายบัญชีและการเงินที่ support@pdhfeedback.local
     </div>
   </div>

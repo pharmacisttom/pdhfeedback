@@ -90,7 +90,7 @@ export default function PlatformClient({
           </div>
           <div>
             <span className="text-base font-bold tracking-tight block">
-              PdhFeedback Platform Console
+              Tomvisfeedback Platform Console
             </span>
             <span className="text-[11px] text-purple-300 font-mono">
               Super Admin Oversight • All Tenants

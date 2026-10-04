@@ -1,11 +1,11 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "PdhFeedback SaaS Developer REST API",
+    "title": "Tomvisfeedback SaaS Developer REST API",
     "version": "1.0.0",
-    "description": "API สำหรับเชื่อมต่อระบบประเมินความพึงพอใจ PdhFeedback กับระบบสารสนเทศโรงพยาบาล (HIS), CRM, POS และเว็บไซต์ภายนอกแบบ Multi-tenant SaaS พร้อมระบบสิทธิ์ Scoped API Keys และ Idempotency",
+    "description": "API สำหรับเชื่อมต่อระบบประเมินความพึงพอใจ Tomvisfeedback กับระบบสารสนเทศโรงพยาบาล (HIS), CRM, POS และเว็บไซต์ภายนอกแบบ Multi-tenant SaaS พร้อมระบบสิทธิ์ Scoped API Keys และ Idempotency",
     "contact": {
-      "name": "PdhFeedback Engineering Team",
+      "name": "Tomvisfeedback Engineering Team",
       "email": "support@pdhfeedback.local"
     }
   },

@@ -108,7 +108,17 @@ export function buildFrameAncestorsCsp(allowedOrigins: string[] = []): string {
  * Validates postMessage event schema.
  */
 export interface WidgetPostMessage {
-  type: "pdhfeedback:ready" | "pdhfeedback:resize" | "pdhfeedback:submitted" | "pdhfeedback:close" | "pdhfeedback:error";
+  type:
+    | "tomvisfeedback:ready"
+    | "tomvisfeedback:resize"
+    | "tomvisfeedback:submitted"
+    | "tomvisfeedback:close"
+    | "tomvisfeedback:error"
+    | "pdhfeedback:ready"
+    | "pdhfeedback:resize"
+    | "pdhfeedback:submitted"
+    | "pdhfeedback:close"
+    | "pdhfeedback:error";
   publicationId: string;
   height?: number;
   timestamp?: number;
@@ -118,6 +128,11 @@ export interface WidgetPostMessage {
 export function isValidWidgetMessage(data: any): data is WidgetPostMessage {
   if (!data || typeof data !== "object") return false;
   const validTypes = [
+    "tomvisfeedback:ready",
+    "tomvisfeedback:resize",
+    "tomvisfeedback:submitted",
+    "tomvisfeedback:close",
+    "tomvisfeedback:error",
     "pdhfeedback:ready",
     "pdhfeedback:resize",
     "pdhfeedback:submitted",

@@ -76,10 +76,10 @@ export default function RegisterPage() {
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         <Link href="/" className="inline-flex items-center gap-2 mb-4">
           <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-teal-700 to-emerald-500 flex items-center justify-center text-white font-black text-2xl shadow-md">
-            P
+            T
           </div>
           <span className="text-2xl font-black tracking-tight text-slate-800">
-            Pdh<span className="text-teal-700">Feedback</span>
+            Tomvis<span className="text-teal-700">Feedback</span>
           </span>
         </Link>
         <h2 className="text-2xl font-bold tracking-tight text-slate-900">

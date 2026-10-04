@@ -79,16 +79,26 @@ export default function EmbedSurveyClient({
   const postToParent = (type: string, payload: Record<string, any> = {}) => {
     if (typeof window === "undefined" || window.parent === window) return;
 
-    const message = {
-      type: `pdhfeedback:${type}`,
-      publicationId: publicCode || publicationId,
-      ...payload,
-    };
-
-    // Use specific parentOrigin if provided and valid, otherwise fallback safely
     const target = parentOrigin && parentOrigin.startsWith("http") ? parentOrigin : "*";
+    const pubIdentifier = publicCode || publicationId;
+
     try {
-      window.parent.postMessage(message, target);
+      window.parent.postMessage(
+        {
+          type: `tomvisfeedback:${type}`,
+          publicationId: pubIdentifier,
+          ...payload,
+        },
+        target
+      );
+      window.parent.postMessage(
+        {
+          type: `pdhfeedback:${type}`,
+          publicationId: pubIdentifier,
+          ...payload,
+        },
+        target
+      );
     } catch (e) {
       console.warn("postMessage dispatch failed:", e);
     }
@@ -354,7 +364,7 @@ export default function EmbedSurveyClient({
       {/* Powered by Tomvis Footer */}
       {!hidePoweredBy && (
         <div className="mt-6 pt-3 border-t border-slate-100 text-center text-[10px] text-slate-400">
-          Powered by <strong className="text-slate-500">PdhFeedback</strong>
+          Powered by <strong className="text-slate-500">Tomvisfeedback</strong>
         </div>
       )}
     </div>

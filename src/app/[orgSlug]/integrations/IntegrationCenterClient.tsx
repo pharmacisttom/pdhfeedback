@@ -370,17 +370,17 @@ export default function IntegrationCenterClient({
   style="width:100%;min-height:480px;border:0;">
 </iframe>`;
 
-  const inlineWidgetSnippet = `<div data-pdhfeedback-widget="${activeEmbedId}" data-mode="inline"></div>
-<script src="${appBaseUrl}/widget/v1.js" data-pdhfeedback-embed="${activeEmbedId}" defer></script>`;
+  const inlineWidgetSnippet = `<div data-tomvisfeedback-widget="${activeEmbedId}" data-mode="inline"></div>
+<script src="${appBaseUrl}/widget/v1.js" data-tomvisfeedback-embed="${activeEmbedId}" defer></script>`;
 
   const dialogWidgetSnippet = `<div
-  data-pdhfeedback-widget="${activeEmbedId}"
+  data-tomvisfeedback-widget="${activeEmbedId}"
   data-mode="dialog"
   data-button-text="${selectedEmbed?.widgetConfig?.buttonText || "ประเมินความพึงพอใจ"}"
   data-button-color="${selectedEmbed?.widgetConfig?.themeColor || "#0f766e"}"
   ${selectedEmbed?.widgetConfig?.isFloating ? 'data-floating="true"' : ""}>
 </div>
-<script src="${appBaseUrl}/widget/v1.js" data-pdhfeedback-embed="${activeEmbedId}" defer></script>`;
+<script src="${appBaseUrl}/widget/v1.js" data-tomvisfeedback-embed="${activeEmbedId}" defer></script>`;
 
   const publicLinkUrl = `${appBaseUrl}/s/${activeEmbedId}`;
 
@@ -723,7 +723,7 @@ export default function IntegrationCenterClient({
                     frame-src &apos;self&apos; {appBaseUrl};
                   </pre>
                   <p>
-                    • <strong>Privacy by Design:</strong> ตัว Widget ไม่มีการอ่าน Cookie หรือ LocalStorage ของเว็บไซต์เจ้าบ้าน และการส่ง Event สำเร็จ (<code>pdhfeedback:submitted</code>) จะส่งเฉพาะเวลาและรหัส Publication โดย<strong>ไม่มีการส่งคะแนนหรือข้อความความคิดเห็น</strong> เพื่อรักษาความเป็นส่วนตัวของผู้ตอบ
+                    • <strong>Privacy by Design:</strong> ตัว Widget ไม่มีการอ่าน Cookie หรือ LocalStorage ของเว็บไซต์เจ้าบ้าน และการส่ง Event สำเร็จ (<code>tomvisfeedback:submitted</code>) จะส่งเฉพาะเวลาและรหัส Publication โดย<strong>ไม่มีการส่งคะแนนหรือข้อความความคิดเห็น</strong> เพื่อรักษาความเป็นส่วนตัวของผู้ตอบ
                   </p>
                 </div>
               </div>

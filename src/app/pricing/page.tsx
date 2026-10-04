@@ -4,9 +4,9 @@ import Link from "next/link";
 import { ShieldAlert, ArrowLeft } from "lucide-react";
 
 export const metadata = {
-  title: "แพ็กเกจและราคา - PdhFeedback Multi-tenant SaaS",
+  title: "แพ็กเกจและราคา - Tomvisfeedback Multi-tenant SaaS",
   description:
-    "รายละเอียดแพ็กเกจ โควตา และสิทธิ์การใช้งานระบบประเมินความพึงพอใจ PdhFeedback สำหรับคลินิก โรงพยาบาล และหน่วยงานบริการ",
+    "รายละเอียดแพ็กเกจ โควตา และสิทธิ์การใช้งานระบบประเมินความพึงพอใจ Tomvisfeedback สำหรับคลินิก โรงพยาบาล และหน่วยงานบริการ",
 };
 
 export default function PricingPage() {

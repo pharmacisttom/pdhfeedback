@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PdhFeedback - ระบบประเมินความพึงพอใจการบริการ Multi-tenant SaaS",
+  title: "Tomvisfeedback - ระบบประเมินความพึงพอใจการบริการ Multi-tenant SaaS",
   description: "รับฟังทุกบริการ เห็นผลชัด ปรับปรุงได้ทันที ระบบประเมินความพึงพอใจสำหรับโรงพยาบาล คลินิก สหกรณ์ และธุรกิจบริการ",
-  keywords: ["ความพึงพอใจ", "CSAT", "NPS", "แบบประเมินบริการ", "QR Code Survey", "PdhFeedback"],
+  keywords: ["ความพึงพอใจ", "CSAT", "NPS", "แบบประเมินบริการ", "QR Code Survey", "Tomvisfeedback"],
 };
 
 export const viewport: Viewport = {

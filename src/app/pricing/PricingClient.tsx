@@ -502,7 +502,7 @@ export default function PricingClient({
 
             <div className="mt-6 pt-4 border-t border-slate-100">
               <a
-                href="mailto:support@pdhfeedback.local?subject=ขอใบเสนอราคา PdhFeedback Enterprise"
+                href="mailto:support@pdhfeedback.local?subject=ขอใบเสนอราคา Tomvisfeedback Enterprise"
                 className="w-full block text-center py-2.5 px-4 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white transition-colors"
               >
                 ขอใบเสนอราคา
@@ -834,7 +834,7 @@ export default function PricingClient({
       {/* Footer */}
       <footer className="mt-auto bg-slate-900 text-slate-400 py-12 border-t border-slate-800 text-xs text-center">
         <div className="max-w-7xl mx-auto px-4">
-          <p className="text-slate-300 font-semibold">PdhFeedback Multi-tenant SaaS Platform</p>
+          <p className="text-slate-300 font-semibold">Tomvisfeedback Multi-tenant SaaS Platform</p>
           <p className="mt-1">“รับฟังทุกบริการ เห็นผลชัด ปรับปรุงได้ทันที”</p>
           <p className="mt-4 text-slate-500">
             พัฒนาและให้บริการโดย บริษัท ทอมวิส ดิจิทัล จำกัด (Tomvis Digital Co., Ltd.) • สงวนลิขสิทธิ์ 2026
@@ -883,7 +883,7 @@ export default function PricingClient({
 
             <div className="space-y-2 pt-2">
               <a
-                href={`mailto:support@pdhfeedback.local?subject=ขอรับสิทธิ์ใช้งานแพ็กเกจ ${contactModalPlan}&body=เรียน ทีมงาน PdhFeedback,%0D%0A%0D%0Aองค์กรของข้าพเจ้ามีความประสงค์ขอรับสิทธิ์ใช้งานแพ็กเกจ ${contactModalPlan} สำหรับระบบประเมินความพึงพอใจ%0D%0Aชื่อองค์กร: %0D%0Aผู้ติดต่อ: %0D%0Aเบอร์โทรศัพท์: `}
+                href={`mailto:support@pdhfeedback.local?subject=ขอรับสิทธิ์ใช้งานแพ็กเกจ ${contactModalPlan}&body=เรียน ทีมงาน Tomvisfeedback,%0D%0A%0D%0Aองค์กรของข้าพเจ้ามีความประสงค์ขอรับสิทธิ์ใช้งานแพ็กเกจ ${contactModalPlan} สำหรับระบบประเมินความพึงพอใจ%0D%0Aชื่อองค์กร: %0D%0Aผู้ติดต่อ: %0D%0Aเบอร์โทรศัพท์: `}
                 className="w-full py-3 px-4 rounded-xl text-xs font-bold text-white bg-teal-700 hover:bg-teal-800 text-center block shadow-md transition-all"
               >
                 ส่งอีเมลติดต่อผู้ดูแล (support@pdhfeedback.local)

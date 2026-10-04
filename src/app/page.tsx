@@ -25,11 +25,11 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-teal-700 to-emerald-500 flex items-center justify-center text-white font-extrabold text-xl shadow-md">
-              P
+              T
             </div>
             <div>
               <span className="text-lg font-black tracking-tight text-slate-800">
-                Pdh<span className="text-teal-700">Feedback</span>
+                Tomvis<span className="text-teal-700">Feedback</span>
               </span>
               <span className="hidden sm:inline-block ml-2 text-[10px] bg-teal-100 text-teal-800 font-bold px-2 py-0.5 rounded-full">
                 SaaS Multi-tenant
@@ -278,7 +278,7 @@ export default function HomePage() {
       <footer className="mt-auto bg-white border-t border-slate-200 py-10 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-800">PdhFeedback</span>
+            <span className="font-bold text-slate-800">Tomvisfeedback</span>
             <span>• ระบบประเมินความพึงพอใจในการรับบริการแบบ Multi-tenant SaaS</span>
           </div>
           <div className="flex items-center gap-4">
