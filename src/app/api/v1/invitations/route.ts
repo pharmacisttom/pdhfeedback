@@ -5,97 +5,185 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { hashIp } from "@/lib/rate-limiter";
 import { logAuditEvent } from "@/lib/audit";
+import { authenticateApiKey, apiError } from "@/lib/api-auth";
+import { getAppBaseUrl } from "@/lib/app-url";
 
 const CreateInvitationSchema = z.object({
-  organizationId: z.string(),
-  surveyVersionId: z.string(),
+  publicationId: z.string().optional(),
+  surveyVersionId: z.string().optional(),
   servicePointId: z.string().optional().nullable(),
   expiresInDays: z.number().int().min(1).max(30).default(7),
+  externalReference: z.string().max(120).optional().nullable(),
+  idempotencyKey: z.string().max(100).optional().nullable(),
 });
+
+export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    // Allow either active session or API key authorization
+    let orgId: string | null = null;
+    let apiKeyId: string | null = null;
+    let keyServicePointId: string | null = null;
+    let userId: string | null = null;
+
     const authHeader = req.headers.get("authorization");
-    let organizationId: string | null = session?.activeOrgId || null;
-
-    if (!session && authHeader?.startsWith("Bearer ")) {
-      const apiKeyRaw = authHeader.substring(7);
-      const hashedKey = crypto.createHash("sha256").update(apiKeyRaw).digest("hex");
-      const apiKey = await prisma.apiKey.findUnique({
-        where: { keyHash: hashedKey },
-      });
-      if (apiKey && !apiKey.isRevoked && (!apiKey.expiresAt || apiKey.expiresAt > new Date())) {
-        organizationId = apiKey.organizationId;
-        await prisma.apiKey.update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } });
+    if (authHeader?.startsWith("Bearer ")) {
+      const authResult = await authenticateApiKey(req, "invitations:write");
+      if (!authResult.success) {
+        return authResult.response;
       }
-    }
-
-    if (!organizationId) {
-      return NextResponse.json({ error: "Unauthorized: Invalid session or API Key" }, { status: 401 });
+      orgId = authResult.organizationId;
+      apiKeyId = authResult.apiKeyId;
+      keyServicePointId = authResult.servicePointId || null;
+    } else {
+      const session = await getSession();
+      if (!session || !session.activeOrgId) {
+        return apiError("UNAUTHORIZED", "ต้องระบุ Bearer API Key หรือเข้าสู่ระบบ", 401);
+      }
+      orgId = session.activeOrgId;
+      userId = session.userId;
     }
 
     const body = await req.json();
     const result = CreateInvitationSchema.safeParse(body);
     if (!result.success) {
-      return NextResponse.json({ error: result.error.errors[0]?.message }, { status: 400 });
+      return apiError(
+        "VALIDATION_ERROR",
+        result.error.errors[0]?.message || "ข้อมูลคำเชิญไม่ถูกต้อง",
+        400
+      );
     }
 
-    const { surveyVersionId, servicePointId, expiresInDays } = result.data;
+    const {
+      publicationId,
+      surveyVersionId,
+      servicePointId,
+      expiresInDays,
+      externalReference,
+    } = result.data;
 
-    // Verify survey version belongs to this organization
-    const version = await prisma.surveyVersion.findUnique({
-      where: { id: surveyVersionId },
-      include: { survey: true, publications: true },
-    });
+    // Check Idempotency-Key from header or body
+    const headerIdempotencyKey = req.headers.get("idempotency-key");
+    const idempotencyKey = headerIdempotencyKey || result.data.idempotencyKey || null;
 
-    if (!version || version.survey.organizationId !== organizationId) {
-      return NextResponse.json({ error: "แบบประเมินไม่ถูกต้องหรือไม่ตรงกับองค์กร" }, { status: 400 });
+    if (idempotencyKey) {
+      const existing = await prisma.surveyInvitation.findFirst({
+        where: {
+          organizationId: orgId,
+          idempotencyKey,
+        },
+      });
+
+      if (existing) {
+        // Return existing invitation
+        const appUrl = getAppBaseUrl(req);
+        // Note: For existing, token hash cannot be reversed, so return existing id & metadata
+        return NextResponse.json({
+          success: true,
+          invitationId: existing.id,
+          expiresAt: existing.expiresAt.toISOString(),
+          isConsumed: existing.isConsumed,
+          externalReference: existing.externalReference,
+          idempotentReplay: true,
+        });
+      }
     }
 
-    // Generate high-entropy 32-byte random token
+    // Verify service point scope if API key has restriction
+    if (keyServicePointId && servicePointId && servicePointId !== keyServicePointId) {
+      return apiError(
+        "FORBIDDEN_SERVICE_POINT",
+        "API Key นี้ถูกจำกัดให้สร้างคำเชิญเฉพาะจุดบริการที่กำหนดเท่านั้น",
+        403
+      );
+    }
+
+    const targetServicePointId = servicePointId || keyServicePointId || null;
+
+    // Resolve SurveyVersion
+    let version: any = null;
+    let targetPublication: any = null;
+
+    if (publicationId) {
+      targetPublication = await prisma.surveyPublication.findFirst({
+        where: {
+          organizationId: orgId,
+          OR: [{ id: publicationId }, { publicCode: publicationId }],
+          isActive: true,
+        },
+        include: { surveyVersion: true },
+      });
+
+      if (!targetPublication) {
+        return apiError("PUBLICATION_NOT_FOUND", "ไม่พบรหัส Publication ที่ระบุหรือไม่ได้เปิดใช้งาน", 404);
+      }
+      version = targetPublication.surveyVersion;
+    } else if (surveyVersionId) {
+      version = await prisma.surveyVersion.findUnique({
+        where: { id: surveyVersionId },
+        include: { survey: true, publications: { where: { isActive: true } } },
+      });
+
+      if (!version || version.survey.organizationId !== orgId) {
+        return apiError("SURVEY_NOT_FOUND", "แบบประเมินไม่ถูกต้องหรือไม่ตรงกับองค์กร", 404);
+      }
+      targetPublication = version.publications[0] || null;
+    } else {
+      return apiError(
+        "MISSING_PARAMETER",
+        "กรุณาระบุ publicationId หรือ surveyVersionId เพื่อผูกกับคำเชิญ",
+        400
+      );
+    }
+
+    // Generate high-entropy 32-byte cryptographic random token
     const rawToken = crypto.randomBytes(32).toString("hex");
-    const hashedToken = hashIp(rawToken); // salted hash for storage
+    const hashedToken = hashIp(rawToken);
 
     const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
 
     const invitation = await prisma.surveyInvitation.create({
       data: {
-        organizationId,
-        surveyVersionId,
-        servicePointId: servicePointId || null,
+        organizationId: orgId,
+        surveyVersionId: version.id,
+        servicePointId: targetServicePointId,
         tokenHash: hashedToken,
+        externalReference: externalReference || null,
+        idempotencyKey,
         expiresAt,
         isConsumed: false,
       },
     });
 
-    // Find publication public code to assemble clean URL
-    const publication = version.publications[0] || (await prisma.surveyPublication.findFirst({
-      where: { surveyVersionId, isActive: true },
-    }));
-
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const surveyUrl = `${appUrl}/s/${publication?.publicCode || "survey"}?invite=${rawToken}`;
+    const appUrl = getAppBaseUrl(req);
+    const pubCode = targetPublication?.publicCode || "survey";
+    const invitationUrl = `${appUrl}/s/${pubCode}?invite=${rawToken}`;
 
     await logAuditEvent({
-      userId: session?.userId || null,
-      organizationId,
-      action: "GENERATE_SURVEY_INVITATION",
+      userId,
+      organizationId: orgId,
+      action: "API_CREATE_SURVEY_INVITATION",
       targetType: "SURVEY_INVITATION",
       targetId: invitation.id,
-      details: { expiresInDays },
+      details: {
+        expiresInDays,
+        hasExternalRef: Boolean(externalReference),
+        hasIdempotencyKey: Boolean(idempotencyKey),
+      },
     });
 
-    return NextResponse.json({
-      success: true,
-      invitationId: invitation.id,
-      invitationUrl: surveyUrl,
-      expiresAt: expiresAt.toISOString(),
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        invitationId: invitation.id,
+        invitationUrl,
+        expiresAt: expiresAt.toISOString(),
+        externalReference: invitation.externalReference,
+      },
+      { status: 201 }
+    );
   } catch (error) {
-    console.error("Generate invitation error:", error);
-    return NextResponse.json({ error: "ไม่สามารถสร้างลิงก์คำเชิญได้" }, { status: 500 });
+    console.error("Create invitation error:", error);
+    return apiError("INTERNAL_ERROR", "ไม่สามารถสร้างลิงก์คำเชิญได้", 500);
   }
 }

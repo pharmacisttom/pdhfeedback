@@ -226,10 +226,17 @@ model SurveyPublication {
   organizationId  String
   surveyVersionId String
   servicePointId  String?
-  publicCode      String        @unique // permanent public access token
+  name            String?       // Label e.g. "เว็บไซต์หลักโรงพยาบาล"
+  publicCode      String        @unique // permanent public access token / embed identifier
+  allowedOrigins  String?       @db.Text // JSON array of exact origins e.g. ["https://hospital.th"]
+  displayMode     String        @default("FULLPAGE") // FULLPAGE, INLINE_IFRAME, JS_WIDGET
+  widgetConfig    String?       @db.Text // JSON configuration for colors, buttonText, language, size
   isActive        Boolean       @default(true)
+  revokedAt       DateTime?
   expiresAt       DateTime?
+  lastAccessedAt  DateTime?
   createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt @default(now())
 
   organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   surveyVersion   SurveyVersion @relation(fields: [surveyVersionId], references: [id], onDelete: Cascade)
@@ -302,20 +309,23 @@ model ResponseContact {
 }
 
 model SurveyInvitation {
-  id              String        @id @default(cuid())
-  organizationId  String
-  surveyVersionId String
-  servicePointId  String?
-  tokenHash       String        @unique
-  expiresAt       DateTime
-  isConsumed      Boolean       @default(false)
-  consumedAt      DateTime?
-  createdAt       DateTime      @default(now())
+  id                String        @id @default(cuid())
+  organizationId    String
+  surveyVersionId   String
+  servicePointId    String?
+  tokenHash         String        @unique
+  externalReference String?       // Opaque external reference (e.g. queue/visit ID from HIS)
+  idempotencyKey    String?       // Idempotent invitation creation
+  expiresAt         DateTime
+  isConsumed        Boolean       @default(false)
+  consumedAt        DateTime?
+  createdAt         DateTime      @default(now())
 
-  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  surveyVersion   SurveyVersion @relation(fields: [surveyVersionId], references: [id], onDelete: Cascade)
+  organization      Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  surveyVersion     SurveyVersion @relation(fields: [surveyVersionId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
+  @@index([organizationId, idempotencyKey])
 }
 
 model FeedbackCase {
@@ -414,7 +424,8 @@ model ApiKey {
   name           String
   keyPrefix      String
   keyHash        String       @unique
-  scopes         String       @default("read:surveys,write:invitations,read:reports")
+  scopes         String       @default("service_points:read,surveys:read,invitations:write,reports:read,usage:read")
+  servicePointId String?      // optional service point restriction
   expiresAt      DateTime?
   lastUsedAt     DateTime?
   isRevoked      Boolean      @default(false)
