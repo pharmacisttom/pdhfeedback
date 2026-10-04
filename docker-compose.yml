@@ -1,0 +1,60 @@
+version: "3.8"
+
+services:
+  # MySQL 8 Database Service
+  db:
+    image: mysql:8.0
+    container_name: pdhfeedback-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-pdh_super_secret_root_password_2026}
+      MYSQL_DATABASE: pdhfeedback
+      MYSQL_USER: pdh_user
+      MYSQL_PASSWORD: ${DB_PASSWORD:-pdh_secure_password_2026}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - pdh_network
+    # Port is ONLY bound to localhost for security (never exposed to public internet)
+    ports:
+      - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-pdh_super_secret_root_password_2026}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PdhFeedback Web Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pdhfeedback-app
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      DATABASE_URL: mysql://pdh_user:${DB_PASSWORD:-pdh_secure_password_2026}@db:3306/pdhfeedback
+      AUTH_SECRET: ${AUTH_SECRET:-pdhfeedback_super_secure_auth_secret_key_2026_dev_only}
+      AUTH_SALT: ${AUTH_SALT:-pdhfeedback_ip_hasher_salt_2026}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-PdhFeedback <no-reply@pdhfeedback.local>}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - pdh_network
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  pdh_network:
+    driver: bridge

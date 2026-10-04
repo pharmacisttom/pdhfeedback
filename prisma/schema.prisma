@@ -1,0 +1,441 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id              String         @id @default(cuid())
+  email           String         @unique
+  passwordHash    String
+  fullName        String
+  phone           String?
+  isPlatformAdmin Boolean        @default(false)
+  status          String         @default("ACTIVE") // ACTIVE, SUSPENDED
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  memberships     Membership[]
+  feedbackNotes   FeedbackNote[]
+  assignedCases   FeedbackCase[] @relation("AssignedCases")
+  auditLogs       AuditLog[]
+}
+
+model Organization {
+  id                  String             @id @default(cuid())
+  name                String
+  slug                String             @unique
+  type                String             @default("HOSPITAL") // HOSPITAL, CLINIC, COOPERATIVE, RETAIL, SERVICE
+  logoUrl             String?            @db.Text
+  timezone            String             @default("Asia/Bangkok")
+  defaultLang         String             @default("th")
+  status              String             @default("ACTIVE") // ACTIVE, SUSPENDED
+  planTier            String             @default("PRO") // FREE, PRO, ENTERPRISE
+  maxServicePoints    Int                @default(50)
+  maxMonthlyResponses Int                @default(10000)
+  maxUsers            Int                @default(20)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  memberships         Membership[]
+  invitations         Invitation[]
+  branches            Branch[]
+  servicePoints       ServicePoint[]
+  surveys             Survey[]
+  surveyPublications  SurveyPublication[]
+  responses           Response[]
+  responseContacts    ResponseContact[]
+  surveyInvitations   SurveyInvitation[]
+  feedbackCases       FeedbackCase[]
+  notifications       Notification[]
+  notificationRules   NotificationRule[]
+  exportJobs          ExportJob[]
+  apiKeys             ApiKey[]
+  auditLogs           AuditLog[]
+}
+
+model Membership {
+  id                String       @id @default(cuid())
+  userId            String
+  organizationId    String
+  role              String       @default("VIEWER") // OWNER, ADMIN, SERVICE_MANAGER, VIEWER
+  servicePointScope String?      @db.Text // JSON array of servicePointIds or null for all
+  canExport         Boolean      @default(false)
+  canViewContacts   Boolean      @default(false)
+  status            String       @default("ACTIVE")
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@index([userId])
+}
+
+model Invitation {
+  id              String       @id @default(cuid())
+  organizationId  String
+  email           String
+  role            String       @default("VIEWER")
+  tokenHash       String       @unique
+  invitedByUserId String
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  status          String       @default("PENDING") // PENDING, ACCEPTED, REVOKED, EXPIRED
+  createdAt       DateTime     @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model Branch {
+  id             String         @id @default(cuid())
+  organizationId String
+  code           String
+  name           String
+  description    String?
+  isArchived     Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  servicePoints  ServicePoint[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+model ServicePoint {
+  id             String              @id @default(cuid())
+  organizationId String
+  branchId       String?
+  code           String
+  name           String
+  description    String?
+  displayOrder   Int                 @default(0)
+  isArchived     Boolean             @default(false)
+  publicCode     String              @unique // permanent stable code for QR
+  activeSurveyId String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch         Branch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  publications   SurveyPublication[]
+  responses      Response[]
+  feedbackCases  FeedbackCase[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([branchId])
+}
+
+model Survey {
+  id             String          @id @default(cuid())
+  organizationId String
+  title          String
+  description    String?
+  slug           String
+  category       String          @default("GENERAL") // HOSPITAL, CLINIC, PHARMACY, COOP, RETAIL, TRAINING
+  isArchived     Boolean         @default(false)
+  currentVersion Int             @default(1)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  versions       SurveyVersion[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+}
+
+model SurveyVersion {
+  id                  String              @id @default(cuid())
+  surveyId            String
+  versionNumber       Int
+  title               String
+  description         String?
+  thankYouTitle       String              @default("ขอบคุณสำหรับข้อเสนอแนะ")
+  thankYouMessage     String              @default("เราจะนำความคิดเห็นของท่านไปพัฒนาคุณภาพการบริการให้ดียิ่งขึ้น")
+  status              String              @default("DRAFT") // DRAFT, PUBLISHED, CLOSED, ARCHIVED
+  allowComments       Boolean             @default(true)
+  allowContactRequest Boolean             @default(false)
+  overallQuestionId   String?
+  language            String              @default("th")
+  startsAt            DateTime?
+  endsAt              DateTime?
+  publishedAt         DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  survey              Survey              @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  questions           SurveyQuestion[]
+  publications        SurveyPublication[]
+  responses           Response[]
+  invitations         SurveyInvitation[]
+
+  @@unique([surveyId, versionNumber])
+  @@index([surveyId])
+}
+
+model SurveyQuestion {
+  id                String           @id @default(cuid())
+  surveyVersionId   String
+  type              String           // RATING_1_5, RATING_SMILEY_1_5, NPS_0_10, SINGLE_CHOICE, MULTIPLE_CHOICE, SHORT_TEXT, LONG_TEXT, YES_NO
+  questionText      String
+  helpText          String?
+  isRequired        Boolean          @default(true)
+  displayOrder      Int              @default(0)
+  isOverallCSAT     Boolean          @default(false)
+  conditionalRules  String?          @db.Text // JSON logic string
+  minChars          Int?
+  maxChars          Int?
+  createdAt         DateTime         @default(now())
+
+  surveyVersion     SurveyVersion    @relation(fields: [surveyVersionId], references: [id], onDelete: Cascade)
+  options           QuestionOption[]
+  answers           ResponseAnswer[]
+
+  @@index([surveyVersionId])
+}
+
+model QuestionOption {
+  id           String         @id @default(cuid())
+  questionId   String
+  optionText   String
+  optionValue  String
+  displayOrder Int            @default(0)
+
+  question     SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+}
+
+model SurveyPublication {
+  id              String        @id @default(cuid())
+  organizationId  String
+  surveyVersionId String
+  servicePointId  String?
+  publicCode      String        @unique // permanent public access token
+  isActive        Boolean       @default(true)
+  expiresAt       DateTime?
+  createdAt       DateTime      @default(now())
+
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  surveyVersion   SurveyVersion @relation(fields: [surveyVersionId], references: [id], onDelete: Cascade)
+  servicePoint    ServicePoint? @relation(fields: [servicePointId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([surveyVersionId])
+  @@index([servicePointId])
+}
+
+model Response {
+  id              String          @id @default(cuid())
+  organizationId  String
+  surveyVersionId String
+  servicePointId  String?
+  invitationId    String?
+  idempotencyKey  String?         @unique
+  ipHash          String?
+  userAgent       String?
+  isFlagged       Boolean         @default(false)
+  flaggedReason   String?
+  overallRating   Int?            // 1-5
+  npsScore        Int?            // 0-10
+  commentText     String?         @db.Text
+  submittedAt     DateTime        @default(now())
+
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  surveyVersion   SurveyVersion   @relation(fields: [surveyVersionId], references: [id], onDelete: Cascade)
+  servicePoint    ServicePoint?   @relation(fields: [servicePointId], references: [id], onDelete: SetNull)
+  answers         ResponseAnswer[]
+  contact         ResponseContact?
+  feedbackCase    FeedbackCase?
+
+  @@index([organizationId, submittedAt])
+  @@index([surveyVersionId])
+  @@index([servicePointId])
+}
+
+model ResponseAnswer {
+  id              String         @id @default(cuid())
+  responseId      String
+  questionId      String
+  ratingValue     Int?           // 1-5 or 0-10
+  textValue       String?        @db.Text
+  booleanValue    Boolean?
+  selectedOptions String?        @db.Text // JSON string array
+
+  response        Response       @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question        SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([responseId])
+  @@index([questionId])
+}
+
+model ResponseContact {
+  id             String       @id @default(cuid())
+  responseId     String       @unique
+  organizationId String
+  name           String?
+  phone          String?
+  email          String?
+  preferredTime  String?
+  consentGiven   Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+
+  response       Response     @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model SurveyInvitation {
+  id              String        @id @default(cuid())
+  organizationId  String
+  surveyVersionId String
+  servicePointId  String?
+  tokenHash       String        @unique
+  expiresAt       DateTime
+  isConsumed      Boolean       @default(false)
+  consumedAt      DateTime?
+  createdAt       DateTime      @default(now())
+
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  surveyVersion   SurveyVersion @relation(fields: [surveyVersionId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model FeedbackCase {
+  id               String         @id @default(cuid())
+  organizationId   String
+  responseId       String         @unique
+  servicePointId   String?
+  caseNumber       String
+  category         String         @default("GENERAL") // SPEED, COMMUNICATION, CLEANLINESS, QUALITY, SERVICE, OTHER
+  urgency          String         @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  status           String         @default("NEW") // NEW, ACKNOWLEDGED, IN_PROGRESS, RESOLVED, CLOSED
+  assignedUserId   String?
+  dueDate          DateTime?
+  rootCause        String?        @db.Text
+  correctiveAction String?        @db.Text
+  resolvedAt       DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  response         Response       @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  servicePoint     ServicePoint?  @relation(fields: [servicePointId], references: [id], onDelete: SetNull)
+  assignedUser     User?          @relation("AssignedCases", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  notes            FeedbackNote[]
+
+  @@index([organizationId, status])
+  @@index([servicePointId])
+}
+
+model FeedbackNote {
+  id             String       @id @default(cuid())
+  feedbackCaseId String
+  userId         String
+  note           String       @db.Text
+  createdAt      DateTime     @default(now())
+
+  feedbackCase   FeedbackCase @relation(fields: [feedbackCaseId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([feedbackCaseId])
+  @@index([userId])
+}
+
+model Notification {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String?      // null for all org admins
+  title          String
+  message        String       @db.Text
+  type           String       @default("INFO") // LOW_RATING, NEW_FEEDBACK, QUOTA_ALERT, SYSTEM
+  link           String?
+  isRead         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, isRead])
+}
+
+model NotificationRule {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  minRatingAlert Int          @default(2) // alert if overall rating <= 2
+  servicePointId String?
+  notifyRoles    String       @default("OWNER,ADMIN,SERVICE_MANAGER")
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model ExportJob {
+  id                String       @id @default(cuid())
+  organizationId    String
+  userId            String
+  downloadTokenHash String       @unique
+  format            String       // CSV, XLSX, PDF
+  status            String       @default("COMPLETED")
+  fileUrl           String?
+  fileName          String
+  recordCount       Int          @default(0)
+  expiresAt         DateTime
+  createdAt         DateTime     @default(now())
+
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model ApiKey {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  keyPrefix      String
+  keyHash        String       @unique
+  scopes         String       @default("read:surveys,write:invitations,read:reports")
+  expiresAt      DateTime?
+  lastUsedAt     DateTime?
+  isRevoked      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model AuditLog {
+  id             String        @id @default(cuid())
+  organizationId String?
+  userId         String?
+  userEmail      String?
+  action         String
+  targetType     String
+  targetId       String?
+  details        String?       @db.Text
+  ipAddress      String?
+  timestamp      DateTime      @default(now())
+
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, timestamp])
+  @@index([userId])
+}
