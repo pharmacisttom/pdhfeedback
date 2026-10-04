@@ -5,6 +5,8 @@ import { getAuthUser } from "@/lib/auth";
 import { logAuditEvent } from "@/lib/audit";
 import { SEED_PLANS } from "@/lib/billing";
 
+import { isBillingDisabled, isSandboxMode, BILLING_DISABLED_API_ERROR } from "@/lib/billing-config";
+
 const CreateOrderSchema = z.object({
   organizationId: z.string(),
   planCode: z.enum(["STARTER", "PROFESSIONAL", "BUSINESS"]),
@@ -12,8 +14,21 @@ const CreateOrderSchema = z.object({
   notes: z.string().optional(),
 });
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   try {
+    // Check if billing system is disabled
+    if (isBillingDisabled()) {
+      return NextResponse.json(
+        {
+          error: BILLING_DISABLED_API_ERROR,
+          billingMode: "disabled",
+        },
+        { status: 403 }
+      );
+    }
+
     const user = await getAuthUser(req);
     if (!user) {
       return NextResponse.json({ error: "กรุณาเข้าสู่ระบบก่อนทำรายการ" }, { status: 401 });
@@ -96,6 +111,7 @@ export async function POST(req: Request) {
         currency: "THB",
         status: "PENDING_PAYMENT",
         paymentMethod: "BANK_TRANSFER",
+        isSandbox: isSandboxMode(),
         notes: notes?.trim() || null,
         expiresAt,
       },

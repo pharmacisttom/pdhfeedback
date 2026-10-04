@@ -489,6 +489,9 @@ model Subscription {
   organizationId             String        @unique
   planId                     String
   status                     String        @default("ACTIVE") // ACTIVE, PENDING_PAYMENT, PAST_DUE, SUSPENDED, CANCELED, EXPIRED
+  subscriptionType           String        @default("ADMIN_GRANT") // "ADMIN_GRANT" (Admin grant, not revenue) or "PAID"
+  fallbackPlanCode           String        @default("FREE") // Fallback plan when grant expires
+  isSandbox                  Boolean       @default(false) // True if created in test/sandbox mode
   billingInterval            String        @default("MONTHLY") // MONTHLY, ANNUAL
   currentPeriodStart         DateTime      @default(now())
   currentPeriodEnd           DateTime
@@ -544,6 +547,7 @@ model BillingOrder {
   currency          String            @default("THB")
   status            String            @default("PENDING_PAYMENT") // PENDING_PAYMENT, UNDER_REVIEW, APPROVED, REJECTED, EXPIRED, CANCELED
   paymentMethod     String            @default("BANK_TRANSFER") // BANK_TRANSFER, PROMPTPAY
+  isSandbox         Boolean           @default(false) // Sandbox test order
   notes             String?
   expiresAt         DateTime
   reviewedAt        DateTime?
@@ -591,6 +595,7 @@ model BillingDocument {
   customerName    String
   customerAddress String?
   customerTaxId   String?
+  isSandbox       Boolean      @default(false)
   issuedAt        DateTime     @default(now())
   createdAt       DateTime     @default(now())
 

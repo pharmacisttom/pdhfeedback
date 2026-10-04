@@ -5,12 +5,25 @@ import { logAuditEvent } from "@/lib/audit";
 import fs from "fs/promises";
 import path from "path";
 import crypto from "crypto";
+import { isBillingDisabled, BILLING_DISABLED_API_ERROR } from "@/lib/billing-config";
 
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   try {
+    if (isBillingDisabled()) {
+      return NextResponse.json(
+        {
+          error: BILLING_DISABLED_API_ERROR,
+          billingMode: "disabled",
+        },
+        { status: 403 }
+      );
+    }
+
     const user = await getAuthUser(req);
     if (!user) {
       return NextResponse.json({ error: "กรุณาเข้าสู่ระบบก่อนทำรายการ" }, { status: 401 });

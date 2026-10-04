@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getOrganizationSubscription, formatSatang } from "@/lib/billing";
 import { FEATURE_CATALOGUE, PLAN_FEATURE_MATRIX } from "@/lib/entitlements";
+import { getBillingMode, isBillingDisabled, isSandboxMode } from "@/lib/billing-config";
 import PlanClientConsole from "./PlanClientConsole";
 
 interface Props {
@@ -68,7 +69,11 @@ export default async function PlanPage({ params }: Props) {
       orgSlug={orgSlug}
       organization={org}
       userRole={userRole}
+      isPlatformAdmin={session.isPlatformAdmin}
       canManageBilling={canManageBilling}
+      billingMode={getBillingMode()}
+      isBillingDisabled={isBillingDisabled()}
+      isSandbox={isSandboxMode()}
       subInfo={subInfo}
       actualCounts={{
         servicePoints: servicePointsCount,

@@ -20,15 +20,23 @@ import {
   QrCode,
   Image as ImageIcon,
   Trash2,
+  Gift,
+  Check,
+  Settings,
 } from "lucide-react";
-import { formatSatang, SEED_PLANS } from "@/lib/billing";
+import { formatSatang } from "@/lib/billing";
 import { FEATURE_CATALOGUE, FeatureKey } from "@/lib/entitlements";
+import { BILLING_DISABLED_MESSAGE } from "@/lib/billing-config";
 
 interface Props {
   orgSlug: string;
   organization: any;
   userRole: string;
+  isPlatformAdmin?: boolean;
   canManageBilling: boolean;
+  billingMode?: "disabled" | "sandbox" | "live";
+  isBillingDisabled?: boolean;
+  isSandbox?: boolean;
   subInfo: any;
   actualCounts: {
     servicePoints: number;
@@ -50,7 +58,11 @@ export default function PlanClientConsole({
   orgSlug,
   organization,
   userRole,
+  isPlatformAdmin = false,
   canManageBilling,
+  billingMode = "disabled",
+  isBillingDisabled = true,
+  isSandbox = false,
   subInfo,
   actualCounts,
   orders,
@@ -59,11 +71,10 @@ export default function PlanClientConsole({
 }: Props) {
   const router = useRouter();
 
+  // Upgrade/Checkout modal state (active in Sandbox or Live mode)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPlanCode, setSelectedPlanCode] = useState<"STARTER" | "PROFESSIONAL" | "BUSINESS">("STARTER");
   const [selectedInterval, setSelectedInterval] = useState<"MONTHLY" | "ANNUAL">("ANNUAL");
-  
-  // Checkout flow state
   const [activeStep, setActiveStep] = useState<"SELECT" | "PAY" | "SUCCESS">("SELECT");
   const [createdOrder, setCreatedOrder] = useState<any | null>(null);
   const [promptPayData, setPromptPayData] = useState<any | null>(null);
@@ -74,9 +85,16 @@ export default function PlanClientConsole({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [userNotes, setUserNotes] = useState("");
-  const [uploadSuccess, setUploadSuccess] = useState(false);
 
-  // Active Plan details
+  // Admin Access Grant modal state (available to Platform Admin)
+  const [isAdminGrantModalOpen, setIsAdminGrantModalOpen] = useState(false);
+  const [grantPlanCode, setGrantPlanCode] = useState<string>("PROFESSIONAL");
+  const [grantDuration, setGrantDuration] = useState<"PERPETUAL" | "1_MONTH" | "1_YEAR" | "CUSTOM">("1_YEAR");
+  const [grantCustomDate, setGrantCustomDate] = useState<string>("");
+  const [grantReason, setGrantReason] = useState<string>("สิทธิ์ทดลองใช้งานสำหรับองค์กรบริการ");
+  const [grantLoading, setGrantLoading] = useState(false);
+  const [grantError, setGrantError] = useState<string | null>(null);
+
   const planCode = subInfo?.planCode || "FREE";
   const limits = subInfo?.limits || {
     servicePoints: 1,
@@ -91,6 +109,7 @@ export default function PlanClientConsole({
   };
 
   const handleOpenUpgradeModal = (presetPlan?: "STARTER" | "PROFESSIONAL" | "BUSINESS") => {
+    if (isBillingDisabled) return;
     if (presetPlan) setSelectedPlanCode(presetPlan);
     setActiveStep("SELECT");
     setCreatedOrder(null);
@@ -121,7 +140,6 @@ export default function PlanClientConsole({
 
       setCreatedOrder(data.order);
 
-      // Fetch PromptPay QR payload for this order
       const ppRes = await fetch(`/api/billing/promptpay?orderId=${data.order.id}`);
       const ppData = await ppRes.json();
       setPromptPayData(ppData);
@@ -176,7 +194,6 @@ export default function PlanClientConsole({
       }
 
       setActiveStep("SUCCESS");
-      setUploadSuccess(true);
       router.refresh();
     } catch (err: any) {
       setErrorMsg(err.message);
@@ -185,8 +202,55 @@ export default function PlanClientConsole({
     }
   };
 
+  const handleIssueAdminGrant = async () => {
+    setGrantLoading(true);
+    setGrantError(null);
+
+    try {
+      let expiresAt: string | null = null;
+      const now = new Date();
+
+      if (grantDuration === "1_MONTH") {
+        const d = new Date(now);
+        d.setMonth(d.getMonth() + 1);
+        expiresAt = d.toISOString();
+      } else if (grantDuration === "1_YEAR") {
+        const d = new Date(now);
+        d.setFullYear(d.getFullYear() + 1);
+        expiresAt = d.toISOString();
+      } else if (grantDuration === "CUSTOM" && grantCustomDate) {
+        expiresAt = new Date(grantCustomDate).toISOString();
+      } else {
+        expiresAt = null; // Perpetual
+      }
+
+      const res = await fetch("/api/platform/access-grant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          organizationId: organization.id,
+          planCode: grantPlanCode,
+          expiresAt,
+          reason: grantReason,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "มอบสิทธิ์ไม่สำเร็จ");
+      }
+
+      setIsAdminGrantModalOpen(false);
+      router.refresh();
+    } catch (err: any) {
+      setGrantError(err.message);
+    } finally {
+      setGrantLoading(false);
+    }
+  };
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 font-sans">
       {/* Top Title & Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -195,20 +259,69 @@ export default function PlanClientConsole({
             แพ็กเกจและการใช้งาน (Usage & Plan)
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            ตรวจสอบโควตาการใช้งาน จัดการแพ็กเกจ และประวัติการสั่งซื้อของ {organization.name}
+            ตรวจสอบโควตาการใช้งาน จัดการแพ็กเกจ และสิทธิ์ของ {organization.name}
           </p>
         </div>
 
-        {canManageBilling && (
-          <button
-            onClick={() => handleOpenUpgradeModal()}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-bold shadow-md shadow-teal-700/20 active:scale-95 transition-all"
-          >
-            <ArrowUpRight className="w-4 h-4" />
-            อัปเกรด / ต่ออายุแพ็กเกจ
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {/* Platform Admin Access Grant Button */}
+          {isPlatformAdmin && (
+            <button
+              onClick={() => setIsAdminGrantModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-purple-700 hover:bg-purple-800 text-white text-xs sm:text-sm font-bold shadow-md shadow-purple-700/20 active:scale-95 transition-all"
+            >
+              <Gift className="w-4 h-4" />
+              มอบสิทธิ์แพ็กเกจ (Admin Grant)
+            </button>
+          )}
+
+          {/* Normal Checkout button only visible when billing is enabled (Sandbox or Live) */}
+          {!isBillingDisabled && canManageBilling && (
+            <button
+              onClick={() => handleOpenUpgradeModal()}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-bold shadow-md shadow-teal-700/20 active:scale-95 transition-all"
+            >
+              <ArrowUpRight className="w-4 h-4" />
+              อัปเกรด / ต่ออายุแพ็กเกจ
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Billing Mode Status Banner */}
+      {isBillingDisabled ? (
+        <div className="bg-amber-50 border border-amber-200/90 rounded-3xl p-5 flex items-start gap-4 text-amber-900 shadow-xs">
+          <div className="w-9 h-9 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">
+            <AlertCircle className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="font-bold text-sm sm:text-base">
+                {BILLING_DISABLED_MESSAGE}
+              </h4>
+              <span className="text-[10px] bg-amber-200/80 text-amber-900 font-extrabold px-2 py-0.5 rounded-full">
+                BILLING DISABLED
+              </span>
+            </div>
+            <p className="text-xs text-amber-800/80 mt-1 leading-relaxed">
+              ระบบแพ็กเกจ ขีดจำกัดจุดบริการ และ Feature Entitlements เปิดให้ใช้งานได้ตามสิทธิ์ที่ผู้ดูแลมอบให้
+              โดยระบบปิดการสั่งซื้อ การแนบสลิป และการเรียกเก็บเงินทั้งหมดในปัจจุบัน
+              องค์กรของท่านจะไม่ถูกระงับการใช้งานจากการไม่ชำระเงิน
+            </p>
+          </div>
+        </div>
+      ) : isSandbox ? (
+        <div className="bg-sky-50 border border-sky-200 rounded-3xl p-4 flex items-center justify-between gap-3 text-sky-900 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="text-[11px] font-black bg-sky-600 text-white px-2.5 py-0.5 rounded-full">
+              SANDBOX MODE
+            </span>
+            <span className="text-xs font-semibold">
+              โหมดทดสอบระบบชำระเงิน - ข้อมูลทั้งหมดเป็นการจำลอง ไม่มีการเรียกเก็บเงินจริง
+            </span>
+          </div>
+        </div>
+      ) : null}
 
       {/* Current Plan & Subscription Card */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm relative overflow-hidden">
@@ -231,15 +344,29 @@ export default function PlanClientConsole({
               >
                 {subInfo?.planName || planCode}
               </span>
-              <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" />
-                สถานะ: พร้อมใช้งาน (Active)
-              </span>
+
+              {subInfo?.isGrant ? (
+                <span className="text-xs bg-purple-50 text-purple-700 border border-purple-200 font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <Gift className="w-3 h-3" />
+                  สิทธิ์มอบโดยผู้ดูแล (Admin Grant)
+                </span>
+              ) : (
+                <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  สถานะ: พร้อมใช้งาน (Active)
+                </span>
+              )}
             </div>
 
             <h2 className="text-3xl font-black text-slate-900 tracking-tight">
               {subInfo?.planName || planCode} Plan
             </h2>
+
+            {subInfo?.adminOverrideReason && (
+              <p className="text-xs text-purple-800 bg-purple-50/80 px-3 py-1.5 rounded-xl border border-purple-100 inline-block">
+                <strong>เหตุผลการมอบสิทธิ์:</strong> {subInfo.adminOverrideReason}
+              </p>
+            )}
 
             <div className="flex flex-wrap items-center gap-y-2 gap-x-6 text-xs text-slate-500">
               <div className="flex items-center gap-1.5">
@@ -251,11 +378,15 @@ export default function PlanClientConsole({
               <div className="flex items-center gap-1.5">
                 <Clock className="w-4 h-4 text-slate-400" />
                 <span>
-                  รอบการคิดเงินสิ้นสุด:{" "}
+                  วันสิ้นสุดสิทธิ์:{" "}
                   <strong>
-                    {new Intl.DateTimeFormat("th-TH", { dateStyle: "medium" }).format(
-                      new Date(subInfo?.currentPeriodEnd)
-                    )}
+                    {subInfo?.isPerpetual
+                      ? "ใช้งานตลอดไป (จนกว่าจะเปลี่ยนแปลง)"
+                      : subInfo?.currentPeriodEnd
+                      ? new Intl.DateTimeFormat("th-TH", { dateStyle: "medium" }).format(
+                          new Date(subInfo.currentPeriodEnd)
+                        )
+                      : "ไม่ระบุ"}
                   </strong>
                 </span>
               </div>
@@ -366,7 +497,7 @@ export default function PlanClientConsole({
 
         <div className="flex flex-wrap gap-2">
           {Object.entries(FEATURE_CATALOGUE).map(([key, feat]) => {
-            const hasAccess = subInfo?.hasFeature(key as FeatureKey);
+            const hasAccess = subInfo?.allFeatures?.includes(key);
             return (
               <div
                 key={key}
@@ -405,7 +536,9 @@ export default function PlanClientConsole({
 
         {orders.length === 0 ? (
           <div className="text-center py-12 text-slate-400 text-xs">
-            ยังไม่มีประวัติคำสั่งซื้อในระบบ
+            {isBillingDisabled
+              ? "ขณะนี้อยู่ในช่วงเปิดให้บริการตามสิทธิ์ผู้ดูแลกำหนด ยังไม่มีการออกคำสั่งซื้อ"
+              : "ยังไม่มีประวัติคำสั่งซื้อในระบบ"}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -480,8 +613,129 @@ export default function PlanClientConsole({
         )}
       </div>
 
-      {/* Upgrade / Order Modal */}
-      {isModalOpen && (
+      {/* Admin Access Grant Modal (Platform Admin only) */}
+      {isAdminGrantModalOpen && isPlatformAdmin && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl relative my-8 space-y-6">
+            <button
+              onClick={() => setIsAdminGrantModalOpen(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-100 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[11px] font-bold mb-2">
+                <Gift className="w-3.5 h-3.5" />
+                Platform Administrative Access Grant
+              </div>
+              <h3 className="text-xl font-black text-slate-900">
+                มอบสิทธิ์แพ็กเกจให้ {organization.name}
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                กำหนดสิทธิ์ใช้งานและโควตาได้ทันทีโดยไม่ต้องชำระเงิน ไม่สร้างยอดขายหรือรายได้ปลอม
+              </p>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1.5">เลือกแพ็กเกจที่ต้องการมอบสิทธิ์</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {["FREE", "STARTER", "PROFESSIONAL", "BUSINESS", "ENTERPRISE"].map((tier) => (
+                    <button
+                      key={tier}
+                      type="button"
+                      onClick={() => setGrantPlanCode(tier)}
+                      className={`p-3 rounded-xl border text-center font-bold transition-all ${
+                        grantPlanCode === tier
+                          ? "border-purple-600 bg-purple-50 text-purple-900"
+                          : "border-slate-200 hover:border-slate-300 text-slate-700"
+                      }`}
+                    >
+                      {tier}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1.5">ระยะเวลาการให้สิทธิ์</label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { id: "1_MONTH", label: "1 เดือน" },
+                    { id: "1_YEAR", label: "1 ปี" },
+                    { id: "PERPETUAL", label: "ตลอดไป" },
+                    { id: "CUSTOM", label: "กำหนดเอง" },
+                  ].map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => setGrantDuration(d.id as any)}
+                      className={`py-2 px-2 rounded-xl border text-center font-semibold text-[11px] transition-all ${
+                        grantDuration === d.id
+                          ? "border-purple-600 bg-purple-50 text-purple-900 font-bold"
+                          : "border-slate-200 text-slate-600 hover:border-slate-300"
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {grantDuration === "CUSTOM" && (
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">วันหมดอายุสิทธิ์</label>
+                  <input
+                    type="date"
+                    value={grantCustomDate}
+                    onChange={(e) => setGrantCustomDate(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-purple-600 text-xs"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">เหตุผลการมอบสิทธิ์ (Audit Log)</label>
+                <input
+                  type="text"
+                  value={grantReason}
+                  onChange={(e) => setGrantReason(e.target.value)}
+                  placeholder="เช่น โครงการความร่วมมือสาธารณสุข, สิทธิ์ทดลองใช้งานฟรี"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-purple-600 text-xs"
+                />
+              </div>
+
+              {grantError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700">
+                  {grantError}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsAdminGrantModalOpen(false)}
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                disabled={grantLoading}
+                onClick={handleIssueAdminGrant}
+                className="px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 shadow-md transition-all active:scale-95 disabled:opacity-50"
+              >
+                {grantLoading ? "กำลังบันทึกสิทธิ์..." : "ยืนยันมอบสิทธิ์"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upgrade / Order Modal (Only available when billing is NOT disabled) */}
+      {isModalOpen && !isBillingDisabled && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl relative my-8">
             <button
@@ -501,7 +755,6 @@ export default function PlanClientConsole({
                   </p>
                 </div>
 
-                {/* Interval Switcher */}
                 <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
                   <button
                     type="button"
@@ -530,7 +783,6 @@ export default function PlanClientConsole({
                   </button>
                 </div>
 
-                {/* Plan Choices */}
                 <div className="space-y-3">
                   {[
                     {
@@ -625,7 +877,6 @@ export default function PlanClientConsole({
                   </p>
                 </div>
 
-                {/* PromptPay QR & Bank Details Box */}
                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center gap-6">
                   {promptPayData?.qrDataUrl ? (
                     <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm shrink-0 text-center">
@@ -667,7 +918,6 @@ export default function PlanClientConsole({
                   </div>
                 </div>
 
-                {/* Slip Upload Input */}
                 <div className="space-y-3">
                   <label className="block text-xs font-bold text-slate-800">
                     แนบหลักฐานการโอนเงิน (สลิป Mobile Banking)

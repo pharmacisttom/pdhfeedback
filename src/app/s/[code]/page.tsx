@@ -99,7 +99,7 @@ export default async function PublicSurveyPage({ params, searchParams }: Props) 
 
   const { getOrganizationSubscription } = await import("@/lib/billing");
   const subInfo = await getOrganizationSubscription(organization.id);
-  const hidePoweredBy = subInfo?.hasFeature("hide_powered_by") ?? false;
+  const hidePoweredBy = subInfo?.allFeatures.includes("hide_powered_by") ?? false;
 
   return (
     <RespondentSurveyClient

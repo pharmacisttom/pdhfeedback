@@ -3,11 +3,22 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
 import { generatePromptPayPayload, formatSatang } from "@/lib/billing";
 import QRCode from "qrcode";
+import { isBillingDisabled, BILLING_DISABLED_API_ERROR } from "@/lib/billing-config";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
+    if (isBillingDisabled()) {
+      return NextResponse.json(
+        {
+          error: BILLING_DISABLED_API_ERROR,
+          billingMode: "disabled",
+        },
+        { status: 403 }
+      );
+    }
+
     const user = await getAuthUser(req);
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

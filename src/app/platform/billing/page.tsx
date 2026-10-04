@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getBillingMode } from "@/lib/billing-config";
 import PlatformBillingClient from "./PlatformBillingClient";
 
 export default async function PlatformBillingPage() {
@@ -11,7 +12,13 @@ export default async function PlatformBillingPage() {
     redirect("/");
   }
 
-  // 1. Fetch all billing orders with relations
+  // 1. Fetch all organizations for admin access grants
+  const organizations = await prisma.organization.findMany({
+    select: { id: true, name: true, slug: true },
+    orderBy: { name: "asc" },
+  });
+
+  // 2. Fetch all billing orders with relations
   const orders = await prisma.billingOrder.findMany({
     orderBy: { createdAt: "desc" },
     include: {
@@ -24,7 +31,7 @@ export default async function PlatformBillingPage() {
     },
   });
 
-  // 2. Fetch all subscriptions
+  // 3. Fetch all subscriptions
   const subscriptions = await prisma.subscription.findMany({
     include: {
       organization: {
@@ -39,7 +46,7 @@ export default async function PlatformBillingPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  // 3. Fetch Plans & Prices
+  // 4. Fetch Plans & Prices
   const plans = await prisma.plan.findMany({
     orderBy: { displayOrder: "asc" },
     include: {
@@ -50,16 +57,25 @@ export default async function PlatformBillingPage() {
     },
   });
 
-  // 4. Fetch Platform Settings (Bank Transfer & PromptPay)
+  // 5. Fetch Platform Settings (Bank Transfer & PromptPay)
   const settings = await prisma.platformSetting.findMany();
   const settingsMap = new Map(settings.map((s) => [s.key, s.value]));
 
-  // 5. Calculate Revenue Metrics (in satang)
+  // 6. Calculate Strict Live Revenue Metrics (in satang)
+  // Strictly excludes Admin Grants and Sandbox orders
   let totalCollectedSatang = 0;
   let totalPendingSatang = 0;
+  let sandboxCollectedSatang = 0;
   let mrrSatang = 0;
 
   orders.forEach((o) => {
+    if (o.isSandbox) {
+      if (o.status === "APPROVED") {
+        sandboxCollectedSatang += o.netAmountSatang;
+      }
+      return; // Do not mix with live revenue
+    }
+
     if (o.status === "APPROVED") {
       totalCollectedSatang += o.netAmountSatang;
     } else if (["PENDING_PAYMENT", "UNDER_REVIEW"].includes(o.status)) {
@@ -69,7 +85,15 @@ export default async function PlatformBillingPage() {
 
   const now = new Date();
   subscriptions.forEach((sub) => {
-    if (sub.status === "ACTIVE" && sub.currentPeriodEnd >= now && sub.plan) {
+    // Only PAID active subscriptions count towards MRR/ARR
+    // Administrative Access Grants and Sandbox subscriptions do NOT contribute to MRR
+    if (
+      sub.status === "ACTIVE" &&
+      sub.subscriptionType === "PAID" &&
+      !sub.isSandbox &&
+      sub.currentPeriodEnd >= now &&
+      sub.plan
+    ) {
       const prices = sub.plan.prices;
       if (sub.billingInterval === "MONTHLY") {
         const monthlyPrice = prices.find((p) => p.billingInterval === "MONTHLY")?.priceSatang || 0;
@@ -82,6 +106,9 @@ export default async function PlatformBillingPage() {
   });
 
   const arrSatang = mrrSatang * 12;
+  const adminGrantsCount = subscriptions.filter(
+    (s) => s.subscriptionType === "ADMIN_GRANT" && s.status === "ACTIVE"
+  ).length;
 
   return (
     <PlatformBillingClient
@@ -90,14 +117,20 @@ export default async function PlatformBillingPage() {
         fullName: session.fullName,
         email: session.email,
       }}
+      billingMode={getBillingMode()}
       metrics={{
         totalCollectedSatang,
         totalPendingSatang,
+        sandboxCollectedSatang,
         mrrSatang,
         arrSatang,
         pendingReviewCount: orders.filter((o) => o.status === "UNDER_REVIEW").length,
-        activeSubscriptionsCount: subscriptions.filter((s) => s.status === "ACTIVE" && s.currentPeriodEnd >= now).length,
+        activeSubscriptionsCount: subscriptions.filter(
+          (s) => s.status === "ACTIVE" && s.currentPeriodEnd >= now
+        ).length,
+        adminGrantsCount,
       }}
+      organizations={organizations}
       orders={orders.map((o) => ({
         id: o.id,
         orderNumber: o.orderNumber,
@@ -109,6 +142,7 @@ export default async function PlatformBillingPage() {
         amountSatang: o.amountSatang,
         netAmountSatang: o.netAmountSatang,
         status: o.status,
+        isSandbox: Boolean(o.isSandbox),
         notes: o.notes,
         rejectionReason: o.rejectionReason,
         createdAt: o.createdAt.toISOString(),
@@ -123,15 +157,21 @@ export default async function PlatformBillingPage() {
               userNotes: o.paymentEvidence.userNotes,
             }
           : null,
-        hasReceipt: o.billingDocuments.some((d) => d.documentType === "RECEIPT" && d.status === "VALID"),
+        hasReceipt: o.billingDocuments.some(
+          (d) => d.documentType === "RECEIPT" && d.status === "VALID"
+        ),
       }))}
       subscriptions={subscriptions.map((s) => ({
         id: s.id,
+        orgId: s.organizationId,
         orgName: s.organization.name,
         orgSlug: s.organization.slug,
         planCode: s.plan.code,
         planName: s.plan.name,
         status: s.status,
+        subscriptionType: s.subscriptionType || "PAID",
+        fallbackPlanCode: s.fallbackPlanCode || "FREE",
+        isSandbox: Boolean(s.isSandbox),
         billingInterval: s.billingInterval,
         currentPeriodStart: s.currentPeriodStart.toISOString(),
         currentPeriodEnd: s.currentPeriodEnd.toISOString(),

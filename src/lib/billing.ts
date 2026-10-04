@@ -5,6 +5,8 @@ import {
   PLAN_FEATURE_MATRIX,
   PlanLimits,
 } from "./entitlements";
+import { isBillingDisabled, isSandboxMode } from "./billing-config";
+import { logAuditEvent } from "./audit";
 
 export interface PlanPricingInfo {
   code: string;
@@ -94,12 +96,6 @@ export function getDaysInMonth(year: number, month: number): number {
 
 /**
  * Monthly quota window calculation based on subscription anchor day.
- * 
- * Rules:
- * - If anchorDay is 31, and reference month has fewer days (e.g. Feb 28/29, Apr 30),
- *   it clamps to the last day of that month.
- * - Handles leap years correctly (Feb 29 on leap years, Feb 28 on regular years).
- * - Even for annual subscriptions, response quotas reset monthly based on this anchor!
  */
 export function getCurrentMonthlyQuotaWindow(
   anchorDay: number,
@@ -109,9 +105,6 @@ export function getCurrentMonthlyQuotaWindow(
   const refMonth = referenceDate.getMonth(); // 0-indexed (0=Jan)
   const refDate = referenceDate.getDate();
 
-  // Determine current period start month & year
-  // If referenceDate is on or after clamped anchorDay for this month, start is this month.
-  // Otherwise, start is previous month.
   const daysInCurrentMonth = getDaysInMonth(refYear, refMonth + 1);
   const clampedAnchorCurrentMonth = Math.min(anchorDay, daysInCurrentMonth);
 
@@ -119,11 +112,9 @@ export function getCurrentMonthlyQuotaWindow(
   let startMonth = refMonth;
 
   if (refDate >= clampedAnchorCurrentMonth) {
-    // Current period started this month
     startYear = refYear;
     startMonth = refMonth;
   } else {
-    // Current period started last month
     if (refMonth === 0) {
       startYear = refYear - 1;
       startMonth = 11;
@@ -135,7 +126,6 @@ export function getCurrentMonthlyQuotaWindow(
   const daysInStartMonth = getDaysInMonth(startYear, startMonth + 1);
   const clampedStartDay = Math.min(anchorDay, daysInStartMonth);
 
-  // Next month for period end
   let endYear = startYear;
   let endMonth = startMonth + 1;
   if (endMonth > 11) {
@@ -174,7 +164,6 @@ export function calculateNextPeriodEnd(
     const clampedDay = Math.min(day, daysInMonth);
     return new Date(year, month, clampedDay, 23, 59, 59, 999);
   } else {
-    // ANNUAL
     const year = result.getFullYear() + 1;
     const month = result.getMonth();
     const daysInMonth = getDaysInMonth(year, month + 1);
@@ -183,10 +172,47 @@ export function calculateNextPeriodEnd(
   }
 }
 
+export interface SerializedSubscriptionInfo {
+  organizationId: string;
+  organizationName: string;
+  organizationSlug: string;
+  isActive: boolean;
+  planCode: string;
+  planName: string;
+  subscriptionType: "ADMIN_GRANT" | "PAID";
+  isGrant: boolean;
+  isPerpetual: boolean;
+  adminOverrideReason: string | null;
+  billingInterval: string;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  cancelAtPeriodEnd: boolean;
+  anchorDay: number;
+  quotaWindow: {
+    start: string;
+    end: string;
+  };
+  limits: PlanLimits;
+  monthlyUsage: number;
+  remainingResponses: number;
+  allFeatures: FeatureKey[];
+}
+
 /**
- * Resolves active subscription and effective entitlements for an organization
+ * Resolves effective subscription, entitlements, and quotas for an organization.
+ * 
+ * Resolution Priority Hierarchy:
+ * 1. Administrative Access Grant (`subscriptionType === "ADMIN_GRANT"`):
+ *    - If within granted validity window: grant overrides all paid checks.
+ *    - If expired: falls back safely to `fallbackPlanCode` (default FREE) without deleting tenant data.
+ * 2. Active Paid Subscription (`subscriptionType === "PAID"`):
+ *    - If within paid validity window, uses paid plan.
+ *    - If billing is globally disabled, paid subscription remains active and never suspends tenant.
+ * 3. Default Fallback: FREE tier.
  */
-export async function getOrganizationSubscription(organizationId: string) {
+export async function getOrganizationSubscription(
+  organizationId: string
+): Promise<SerializedSubscriptionInfo | null> {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
     include: {
@@ -207,61 +233,85 @@ export async function getOrganizationSubscription(organizationId: string) {
   const now = new Date();
   const sub = org.subscription;
 
-  // If no subscription or expired/suspended, fall back to FREE tier
-  const isActive =
-    sub &&
-    sub.status === "ACTIVE" &&
-    sub.currentPeriodEnd >= now;
-
   let planCode = "FREE";
-  let limits: PlanLimits = { ...PLAN_FEATURE_MATRIX.FREE.limits };
-  let features: Set<FeatureKey> = new Set(PLAN_FEATURE_MATRIX.FREE.features);
+  let subscriptionType: "ADMIN_GRANT" | "PAID" = "ADMIN_GRANT";
+  let isGrant = false;
+  let isPerpetual = false;
+  let isActive = true;
 
-  if (isActive && sub.plan) {
-    planCode = sub.plan.code;
-    const matrix = PLAN_FEATURE_MATRIX[planCode] || PLAN_FEATURE_MATRIX.FREE;
+  if (sub && sub.status === "ACTIVE") {
+    if (sub.subscriptionType === "ADMIN_GRANT") {
+      // Priority 1: Admin Grant
+      const isExpired = sub.currentPeriodEnd && sub.currentPeriodEnd < now;
+      if (!isExpired) {
+        planCode = sub.plan?.code || "FREE";
+        subscriptionType = "ADMIN_GRANT";
+        isGrant = true;
+        isPerpetual = sub.currentPeriodEnd.getFullYear() >= 2090;
+      } else {
+        // Expired grant -> fallback
+        planCode = sub.fallbackPlanCode || "FREE";
+        subscriptionType = "ADMIN_GRANT";
+        isGrant = false;
+      }
+    } else {
+      // Priority 2: Paid Subscription
+      const isPaidValid = sub.currentPeriodEnd >= now;
+      if (isPaidValid || isBillingDisabled()) {
+        planCode = sub.plan?.code || "FREE";
+        subscriptionType = "PAID";
+        isGrant = false;
+      } else {
+        planCode = "FREE";
+        subscriptionType = "PAID";
+      }
+    }
+  } else {
+    // Priority 3: Fallback Free
+    planCode = "FREE";
+  }
 
-    limits = {
-      servicePoints: sub.customServicePointsLimit ?? sub.plan.maxServicePoints ?? matrix.limits.servicePoints,
-      members: sub.customMembersLimit ?? sub.plan.maxMembers ?? matrix.limits.members,
-      activeSurveys: sub.customSurveysLimit ?? sub.plan.maxActiveSurveys ?? matrix.limits.activeSurveys,
-      responsesPerMonth:
-        sub.customMonthlyResponseQuota ??
-        sub.plan.monthlyResponseQuota ??
-        matrix.limits.responsesPerMonth,
-    };
+  // Resolve limits and features
+  const matrix = PLAN_FEATURE_MATRIX[planCode] || PLAN_FEATURE_MATRIX.FREE;
+  const targetPlan = sub?.plan?.code === planCode ? sub.plan : null;
 
-    // Parse features from plan record and matrix
-    let planFeatures: FeatureKey[] = [];
+  const limits: PlanLimits = {
+    servicePoints: sub?.customServicePointsLimit ?? targetPlan?.maxServicePoints ?? matrix.limits.servicePoints,
+    members: sub?.customMembersLimit ?? targetPlan?.maxMembers ?? matrix.limits.members,
+    activeSurveys: sub?.customSurveysLimit ?? targetPlan?.maxActiveSurveys ?? matrix.limits.activeSurveys,
+    responsesPerMonth:
+      sub?.customMonthlyResponseQuota ??
+      targetPlan?.monthlyResponseQuota ??
+      matrix.limits.responsesPerMonth,
+  };
+
+  let planFeatures: FeatureKey[] = [];
+  try {
+    if (targetPlan?.features) {
+      planFeatures = JSON.parse(targetPlan.features);
+    }
+  } catch {
+    planFeatures = matrix.features;
+  }
+  if (planFeatures.length === 0) {
+    planFeatures = matrix.features;
+  }
+
+  const featuresSet = new Set<FeatureKey>(planFeatures);
+
+  if (sub?.customFeatures) {
     try {
-      if (sub.plan.features) {
-        planFeatures = JSON.parse(sub.plan.features);
-      }
+      const custom: FeatureKey[] = JSON.parse(sub.customFeatures);
+      custom.forEach((f) => featuresSet.add(f));
     } catch {
-      planFeatures = matrix.features;
-    }
-    if (planFeatures.length === 0) {
-      planFeatures = matrix.features;
-    }
-
-    features = new Set(planFeatures);
-
-    // Apply custom feature overrides if present
-    if (sub.customFeatures) {
-      try {
-        const custom: FeatureKey[] = JSON.parse(sub.customFeatures);
-        custom.forEach((f) => features.add(f));
-      } catch {
-        // ignore JSON parse error
-      }
+      // ignore JSON parse error
     }
   }
 
-  // Calculate monthly quota window
+  // Quota window
   const anchorDay = sub?.anchorDay ?? 1;
   const quotaWindow = getCurrentMonthlyQuotaWindow(anchorDay, now);
 
-  // Count responses recorded within this billing month window
   const monthlyUsage = await prisma.response.count({
     where: {
       organizationId,
@@ -272,28 +322,38 @@ export async function getOrganizationSubscription(organizationId: string) {
     },
   });
 
+  const periodStart = sub?.currentPeriodStart ?? now;
+  const periodEnd = sub?.currentPeriodEnd ?? quotaWindow.end;
+
   return {
-    organization: org,
-    subscription: sub,
-    isActive: Boolean(isActive),
+    organizationId: org.id,
+    organizationName: org.name,
+    organizationSlug: org.slug,
+    isActive,
     planCode,
-    planName: sub?.plan?.name ?? (planCode === "FREE" ? "Free" : planCode),
+    planName: targetPlan?.name ?? (planCode === "FREE" ? "Free" : planCode),
+    subscriptionType,
+    isGrant,
+    isPerpetual,
+    adminOverrideReason: sub?.adminOverrideReason || null,
     billingInterval: sub?.billingInterval ?? "MONTHLY",
-    currentPeriodStart: sub?.currentPeriodStart ?? now,
-    currentPeriodEnd: sub?.currentPeriodEnd ?? quotaWindow.end,
+    currentPeriodStart: periodStart.toISOString(),
+    currentPeriodEnd: periodEnd.toISOString(),
     cancelAtPeriodEnd: sub?.cancelAtPeriodEnd ?? false,
     anchorDay,
-    quotaWindow,
+    quotaWindow: {
+      start: quotaWindow.start.toISOString(),
+      end: quotaWindow.end.toISOString(),
+    },
     limits,
     monthlyUsage,
     remainingResponses: Math.max(0, limits.responsesPerMonth - monthlyUsage),
-    hasFeature: (key: FeatureKey) => features.has(key),
-    allFeatures: Array.from(features),
+    allFeatures: Array.from(featuresSet),
   };
 }
 
 /**
- * Guard check: throws or returns error response if feature is not entitled
+ * Guard check: checks if organization has feature entitlement
  */
 export async function requireFeature(
   organizationId: string,
@@ -308,7 +368,7 @@ export async function requireFeature(
   }
 
   const sub = await getOrganizationSubscription(organizationId);
-  if (!sub || !sub.hasFeature(feature)) {
+  if (!sub || !sub.allFeatures.includes(feature)) {
     return {
       allowed: false,
       error: `ฟีเจอร์ '${meta?.name || feature}' จำเป็นต้องอัปเกรดเป็นแพ็กเกจที่สูงขึ้น กรุณาตรวจสอบแพ็กเกจของคุณ`,
@@ -316,6 +376,119 @@ export async function requireFeature(
   }
 
   return { allowed: true };
+}
+
+/**
+ * Platform Admin function to grant plan access without payment (Administrative Access Grant)
+ * Does NOT generate billing orders, payments, or revenue.
+ */
+export async function grantAdministrativeAccess(params: {
+  organizationId: string;
+  planCode: string;
+  expiresAt?: Date | null;
+  reason: string;
+  adminUserId: string;
+  adminEmail: string;
+  fallbackPlanCode?: string;
+  customLimits?: Partial<PlanLimits>;
+}) {
+  const {
+    organizationId,
+    planCode,
+    expiresAt,
+    reason,
+    adminUserId,
+    adminEmail,
+    fallbackPlanCode = "FREE",
+    customLimits,
+  } = params;
+
+  const plan = await prisma.plan.findUnique({
+    where: { code: planCode },
+  });
+
+  if (!plan) {
+    throw new Error(`ไม่พบแพ็กเกจ ${planCode} ในระบบ`);
+  }
+
+  const now = new Date();
+  const effectiveEnd = expiresAt ?? new Date("2099-12-31T23:59:59Z"); // Perpetual if null
+
+  const existingSub = await prisma.subscription.findUnique({
+    where: { organizationId },
+  });
+
+  let subscription;
+  if (existingSub) {
+    subscription = await prisma.subscription.update({
+      where: { id: existingSub.id },
+      data: {
+        planId: plan.id,
+        subscriptionType: "ADMIN_GRANT",
+        status: "ACTIVE",
+        currentPeriodStart: now,
+        currentPeriodEnd: effectiveEnd,
+        fallbackPlanCode,
+        adminOverrideReason: reason,
+        adminOverrideExpiresAt: expiresAt ?? null,
+        isSandbox: false,
+        customServicePointsLimit: customLimits?.servicePoints ?? null,
+        customMembersLimit: customLimits?.members ?? null,
+        customSurveysLimit: customLimits?.activeSurveys ?? null,
+        customMonthlyResponseQuota: customLimits?.responsesPerMonth ?? null,
+      },
+      include: {
+        plan: true,
+      },
+    });
+  } else {
+    subscription = await prisma.subscription.create({
+      data: {
+        organizationId,
+        planId: plan.id,
+        subscriptionType: "ADMIN_GRANT",
+        status: "ACTIVE",
+        billingInterval: "ANNUAL",
+        currentPeriodStart: now,
+        currentPeriodEnd: effectiveEnd,
+        anchorDay: 1,
+        fallbackPlanCode,
+        adminOverrideReason: reason,
+        adminOverrideExpiresAt: expiresAt ?? null,
+        isSandbox: false,
+        customServicePointsLimit: customLimits?.servicePoints ?? null,
+        customMembersLimit: customLimits?.members ?? null,
+        customSurveysLimit: customLimits?.activeSurveys ?? null,
+        customMonthlyResponseQuota: customLimits?.responsesPerMonth ?? null,
+      },
+      include: {
+        plan: true,
+      },
+    });
+  }
+
+  // Update Organization tier & limits
+  await prisma.organization.update({
+    where: { id: organizationId },
+    data: {
+      planTier: plan.code,
+      maxServicePoints: customLimits?.servicePoints ?? plan.maxServicePoints,
+      maxMonthlyResponses: customLimits?.responsesPerMonth ?? plan.monthlyResponseQuota,
+    },
+  });
+
+  // Log Audit trail
+  await logAuditEvent({
+    organizationId,
+    userId: adminUserId,
+    userEmail: adminEmail,
+    action: "ADMIN_ACCESS_GRANT_ISSUED",
+    targetType: "SUBSCRIPTION",
+    targetId: subscription.id,
+    details: `Platform admin issued Administrative Access Grant: Plan ${plan.code} until ${expiresAt ? expiresAt.toISOString() : 'perpetual'}. Reason: ${reason}`,
+  });
+
+  return subscription;
 }
 
 // -----------------------------------------------------------------------------
@@ -343,12 +516,6 @@ function emvField(id: string, value: string): string {
   return `${id}${len}${value}`;
 }
 
-/**
- * Generate standard Thai PromptPay QR payload string with exact amount
- * 
- * target: Phone number (08x, 09x) or 13-digit National ID / Tax ID
- * amountSatang: satang integer (e.g. 29900 = 299.00 THB)
- */
 export function generatePromptPayPayload(
   target: string,
   amountSatang?: number
@@ -357,35 +524,31 @@ export function generatePromptPayPayload(
 
   let targetField = "";
   if (cleaned.length === 10 && cleaned.startsWith("0")) {
-    // Mobile number: international format 0066...
     const formatted = "0066" + cleaned.substring(1);
     targetField = emvField("01", formatted);
   } else if (cleaned.length === 13) {
-    // National ID or Tax ID
     targetField = emvField("02", cleaned);
   } else {
-    // Fallback formatted mobile
     const formatted = cleaned.startsWith("66") ? "00" + cleaned : "0066" + cleaned;
     targetField = emvField("01", formatted);
   }
 
-  // Merchant Account Info (PromptPay AID: A000000677010111)
   const maiValue = emvField("00", "A000000677010111") + targetField;
   const mai = emvField("29", maiValue);
 
   let payload = "";
-  payload += emvField("00", "01"); // Format Indicator
-  payload += emvField("01", amountSatang && amountSatang > 0 ? "12" : "11"); // 12=Dynamic, 11=Static
+  payload += emvField("00", "01");
+  payload += emvField("01", amountSatang && amountSatang > 0 ? "12" : "11");
   payload += mai;
-  payload += emvField("53", "764"); // Currency: THB (764)
+  payload += emvField("53", "764");
 
   if (amountSatang && amountSatang > 0) {
     const bahtStr = (amountSatang / 100).toFixed(2);
     payload += emvField("54", bahtStr);
   }
 
-  payload += emvField("58", "TH"); // Country: TH
-  payload += "6304"; // Checksum tag
+  payload += emvField("58", "TH");
+  payload += "6304";
 
   const checksum = crc16(payload);
   return payload + checksum;
