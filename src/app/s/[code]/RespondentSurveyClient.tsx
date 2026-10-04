@@ -70,6 +70,7 @@ interface Props {
   surveyVersion: SurveyVersion;
   invitationToken?: string;
   isKioskMode?: boolean;
+  hidePoweredBy?: boolean;
 }
 
 const RATING_LABELS: Record<number, { th: string; color: string; desc: string }> = {
@@ -87,6 +88,7 @@ export default function RespondentSurveyClient({
   surveyVersion,
   invitationToken,
   isKioskMode,
+  hidePoweredBy = false,
 }: Props) {
   // Idempotency key per session load
   const [idempotencyKey] = useState<string>(() => {
@@ -789,6 +791,13 @@ export default function RespondentSurveyClient({
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Powered by Tomvis Footer */}
+          {!hidePoweredBy && (
+            <div className="text-center text-[11px] text-slate-400 py-4 pb-16">
+              Powered by <span className="font-semibold text-slate-600">Tomvis</span> • ระบบประเมินความพึงพอใจการบริการ
             </div>
           )}
 

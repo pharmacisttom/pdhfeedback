@@ -7,6 +7,15 @@ async function main() {
   console.log("🌱 Starting idempotent PdhFeedback database seeding...");
 
   // Clean existing demo data safely
+  await prisma.billingDocument.deleteMany();
+  await prisma.paymentEvidence.deleteMany();
+  await prisma.billingOrder.deleteMany();
+  await prisma.usagePeriod.deleteMany();
+  await prisma.subscription.deleteMany();
+  await prisma.planPrice.deleteMany();
+  await prisma.plan.deleteMany();
+  await prisma.billingProfile.deleteMany();
+  await prisma.platformSetting.deleteMany();
   await prisma.auditLog.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.notificationRule.deleteMany();
@@ -559,6 +568,469 @@ async function main() {
     },
   });
 
+  // ---------------------------------------------------------------------------
+  // Seed SaaS Plans & Pricing
+  // ---------------------------------------------------------------------------
+  console.log("💳 Seeding SaaS Plans and Pricing Matrix...");
+  const freePlan = await prisma.plan.create({
+    data: {
+      code: "FREE",
+      name: "Free",
+      description: "สำหรับทดลองใช้ 1 จุดบริการ เริ่มต้นรับฟังเสียงผู้รับบริการทันที",
+      displayOrder: 1,
+      maxServicePoints: 1,
+      maxMembers: 1,
+      maxActiveSurveys: 1,
+      monthlyResponseQuota: 100,
+      features: JSON.stringify([]),
+    },
+  });
+
+  const starterPlan = await prisma.plan.create({
+    data: {
+      code: "STARTER",
+      name: "Starter",
+      description: "สำหรับคลินิก ร้านค้า สหกรณ์ หรือหน่วยงานขนาดเล็ก",
+      displayOrder: 2,
+      maxServicePoints: 5,
+      maxMembers: 3,
+      maxActiveSurveys: 5,
+      monthlyResponseQuota: 1000,
+      features: JSON.stringify([
+        "custom_questions",
+        "dashboard_filters",
+        "xlsx_export",
+        "custom_branding",
+        "feedback_tracking",
+      ]),
+    },
+  });
+
+  const proPlan = await prisma.plan.create({
+    data: {
+      code: "PROFESSIONAL",
+      name: "Professional",
+      description: "สำหรับโรงพยาบาลชุมชน ศูนย์บริการสาธารณสุข หรือธุรกิจบริการหลายจุด",
+      displayOrder: 3,
+      maxServicePoints: 20,
+      maxMembers: 10,
+      maxActiveSurveys: 20,
+      monthlyResponseQuota: 5000,
+      features: JSON.stringify([
+        "custom_questions",
+        "dashboard_filters",
+        "xlsx_export",
+        "custom_branding",
+        "feedback_tracking",
+        "comparison_dashboard",
+        "pdf_reports",
+        "conditional_questions",
+        "invitation_links",
+        "feedback_assignment",
+        "email_notifications",
+        "scheduled_reports",
+        "multilingual_surveys",
+        "custom_styling",
+      ]),
+    },
+  });
+
+  const businessPlan = await prisma.plan.create({
+    data: {
+      code: "BUSINESS",
+      name: "Business",
+      description: "สำหรับโรงพยาบาลทั่วไป องค์กรขนาดใหญ่ หรือเครือข่ายหลายสาขา",
+      displayOrder: 4,
+      maxServicePoints: 100,
+      maxMembers: 30,
+      maxActiveSurveys: 100,
+      monthlyResponseQuota: 20000,
+      features: JSON.stringify([
+        "custom_questions",
+        "dashboard_filters",
+        "xlsx_export",
+        "custom_branding",
+        "feedback_tracking",
+        "comparison_dashboard",
+        "pdf_reports",
+        "conditional_questions",
+        "invitation_links",
+        "feedback_assignment",
+        "email_notifications",
+        "scheduled_reports",
+        "multilingual_surveys",
+        "custom_styling",
+        "api_access",
+        "webhooks",
+        "embed_widget",
+        "advanced_roles",
+        "advanced_audit",
+        "scheduled_exports",
+        "hide_powered_by",
+      ]),
+    },
+  });
+
+  const enterprisePlan = await prisma.plan.create({
+    data: {
+      code: "ENTERPRISE",
+      name: "Enterprise",
+      description: "สำหรับองค์กรขนาดใหญ่ เครือข่ายสุขภาพระดับเขต หรือระบบภาครัฐ",
+      displayOrder: 5,
+      maxServicePoints: 999999,
+      maxMembers: 999999,
+      maxActiveSurveys: 999999,
+      monthlyResponseQuota: 999999,
+      features: JSON.stringify([
+        "custom_questions",
+        "dashboard_filters",
+        "xlsx_export",
+        "custom_branding",
+        "feedback_tracking",
+        "comparison_dashboard",
+        "pdf_reports",
+        "conditional_questions",
+        "invitation_links",
+        "feedback_assignment",
+        "email_notifications",
+        "scheduled_reports",
+        "multilingual_surveys",
+        "custom_styling",
+        "api_access",
+        "webhooks",
+        "embed_widget",
+        "advanced_roles",
+        "advanced_audit",
+        "scheduled_exports",
+        "hide_powered_by",
+      ]),
+    },
+  });
+
+  // Seed Plan Prices (in satang)
+  const starterPriceMonthly = await prisma.planPrice.create({
+    data: {
+      planId: starterPlan.id,
+      billingInterval: "MONTHLY",
+      priceSatang: 29900, // 299 THB
+    },
+  });
+
+  const starterPriceAnnual = await prisma.planPrice.create({
+    data: {
+      planId: starterPlan.id,
+      billingInterval: "ANNUAL",
+      priceSatang: 299000, // 2,990 THB
+    },
+  });
+
+  await prisma.planPrice.create({
+    data: {
+      planId: proPlan.id,
+      billingInterval: "MONTHLY",
+      priceSatang: 79900, // 799 THB
+    },
+  });
+
+  await prisma.planPrice.create({
+    data: {
+      planId: proPlan.id,
+      billingInterval: "ANNUAL",
+      priceSatang: 799000, // 7,990 THB
+    },
+  });
+
+  await prisma.planPrice.create({
+    data: {
+      planId: businessPlan.id,
+      billingInterval: "MONTHLY",
+      priceSatang: 199000, // 1,990 THB
+    },
+  });
+
+  await prisma.planPrice.create({
+    data: {
+      planId: businessPlan.id,
+      billingInterval: "ANNUAL",
+      priceSatang: 1990000, // 19,900 THB
+    },
+  });
+
+  // ---------------------------------------------------------------------------
+  // Seed Platform Settings (Bank Details for Manual Transfer & PromptPay)
+  // ---------------------------------------------------------------------------
+  await prisma.platformSetting.createMany({
+    data: [
+      {
+        key: "bank_name",
+        value: "ธนาคารกสิกรไทย (KBANK)",
+        description: "ชื่อธนาคารสำหรับโอนเงิน",
+      },
+      {
+        key: "bank_account_number",
+        value: "012-3-45678-9",
+        description: "เลขที่บัญชีรับเงิน",
+      },
+      {
+        key: "bank_account_name",
+        value: "บจก. ทอมวิส ดิจิทัล (Tomvis Digital Co., Ltd.)",
+        description: "ชื่อบัญชีรับเงิน",
+      },
+      {
+        key: "promptpay_id",
+        value: "0105566012345",
+        description: "เบอร์หรือเลขประจำตัวผู้เสียภาษีสำหรับสร้าง QR PromptPay",
+      },
+      {
+        key: "promptpay_name",
+        value: "บจก. ทอมวิส ดิจิทัล",
+        description: "ชื่อผู้รับ PromptPay",
+      },
+      {
+        key: "tax_id",
+        value: "0105566012345",
+        description: "เลขประจำตัวผู้เสียภาษีผู้ออกเอกสาร",
+      },
+    ],
+  });
+
+  // ---------------------------------------------------------------------------
+  // Create Organization 3: Dental Clinic (Demonstrates FREE tier & Upgrade)
+  // ---------------------------------------------------------------------------
+  const dentalOwnerPassword = await bcrypt.hash("Dental@2026", 10);
+  const dentalOwner = await prisma.user.create({
+    data: {
+      email: "owner.dental@pdhfeedback.local",
+      fullName: "ทพญ.พิชชาภา สดใส (ผู้บริหารคลินิกทันตกรรม)",
+      passwordHash: dentalOwnerPassword,
+      isPlatformAdmin: false,
+      status: "ACTIVE",
+    },
+  });
+
+  const dentalOrg = await prisma.organization.create({
+    data: {
+      name: "คลินิกทันตกรรมยิ้มสดใส (สาธิตฟรี)",
+      slug: "smile-dental",
+      type: "CLINIC",
+      timezone: "Asia/Bangkok",
+      defaultLang: "th",
+      planTier: "FREE",
+      maxServicePoints: 1,
+      maxMonthlyResponses: 100,
+    },
+  });
+
+  await prisma.membership.create({
+    data: {
+      userId: dentalOwner.id,
+      organizationId: dentalOrg.id,
+      role: "OWNER",
+      canExport: true,
+      canViewContacts: true,
+      status: "ACTIVE",
+    },
+  });
+
+  const spDental = await prisma.servicePoint.create({
+    data: {
+      organizationId: dentalOrg.id,
+      code: "CHAIR-1",
+      name: "เคาน์เตอร์บริการทันตกรรม",
+      publicCode: "dental-smile-front",
+      displayOrder: 1,
+    },
+  });
+
+  const dentalSurvey = await prisma.survey.create({
+    data: {
+      organizationId: dentalOrg.id,
+      title: "แบบประเมินความพึงพอใจการรักษาทันตกรรม",
+      slug: "dental-satisfaction",
+      category: "CLINIC",
+      currentVersion: 1,
+    },
+  });
+
+  const dentalVersion = await prisma.surveyVersion.create({
+    data: {
+      surveyId: dentalSurvey.id,
+      versionNumber: 1,
+      title: "แบบประเมินบริการทันตกรรม 2569",
+      status: "PUBLISHED",
+      publishedAt: new Date(),
+    },
+  });
+
+  const dq1 = await prisma.surveyQuestion.create({
+    data: {
+      surveyVersionId: dentalVersion.id,
+      type: "RATING_1_5",
+      questionText: "ความพึงพอใจต่อการให้คำแนะนำและบริการของทันตแพทย์",
+      isRequired: true,
+      displayOrder: 1,
+      isOverallCSAT: true,
+    },
+  });
+
+  await prisma.surveyPublication.create({
+    data: {
+      organizationId: dentalOrg.id,
+      surveyVersionId: dentalVersion.id,
+      servicePointId: spDental.id,
+      publicCode: spDental.publicCode,
+      isActive: true,
+    },
+  });
+
+  // Seed 5 sample responses for dental clinic
+  for (let d = 1; d <= 5; d++) {
+    const dResp = await prisma.response.create({
+      data: {
+        organizationId: dentalOrg.id,
+        surveyVersionId: dentalVersion.id,
+        servicePointId: spDental.id,
+        overallRating: 5,
+        npsScore: 9,
+        commentText: "คุณหมอมือเบา อธิบายการดูแลฟันดีมากค่ะ",
+      },
+    });
+
+    await prisma.responseAnswer.create({
+      data: {
+        responseId: dResp.id,
+        questionId: dq1.id,
+        ratingValue: 5,
+      },
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Seed Subscriptions & Billing Profiles
+  // ---------------------------------------------------------------------------
+  const now = new Date();
+  const oneYearLater = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
+
+  // Hospital: ENTERPRISE Subscription
+  await prisma.subscription.create({
+    data: {
+      organizationId: hospitalOrg.id,
+      planId: enterprisePlan.id,
+      status: "ACTIVE",
+      billingInterval: "ANNUAL",
+      currentPeriodStart: now,
+      currentPeriodEnd: oneYearLater,
+      anchorDay: 1,
+    },
+  });
+
+  await prisma.billingProfile.create({
+    data: {
+      organizationId: hospitalOrg.id,
+      companyName: "โรงพยาบาลปทุมธานี เฮลท์แคร์ จำกัด (มหาชน)",
+      taxId: "0107565000123",
+      branchName: "สำนักงานใหญ่",
+      address: "123 หมู่ 4 ต.บางปรอก อ.เมือง จ.ปทุมธานี 12000",
+      contactName: "นพ.ประจักษ์ เกียรติดำรง",
+      contactEmail: "owner.hospital@pdhfeedback.local",
+      contactPhone: "02-979-1111",
+    },
+  });
+
+  // Coop: STARTER (Annual) Subscription + Approved Billing Order & Receipt
+  const coopSub = await prisma.subscription.create({
+    data: {
+      organizationId: coopOrg.id,
+      planId: starterPlan.id,
+      status: "ACTIVE",
+      billingInterval: "ANNUAL",
+      currentPeriodStart: now,
+      currentPeriodEnd: oneYearLater,
+      anchorDay: now.getDate(),
+    },
+  });
+
+  await prisma.billingProfile.create({
+    data: {
+      organizationId: coopOrg.id,
+      companyName: "สหกรณ์ออมทรัพย์โรงพยาบาลปทุมธานี จำกัด",
+      taxId: "0994000123456",
+      branchName: "สำนักงานใหญ่",
+      address: "123/9 ตึกอำนวยการ รพ.ปทุมธานี อ.เมือง จ.ปทุมธานี 12000",
+      contactName: "นายสมชาย เจริญสุข",
+      contactEmail: "owner.coop@pdhfeedback.local",
+      contactPhone: "02-979-2222",
+    },
+  });
+
+  // Create demo approved order for Coop
+  const coopOrder = await prisma.billingOrder.create({
+    data: {
+      orderNumber: "ORD-202610-0001",
+      organizationId: coopOrg.id,
+      planId: starterPlan.id,
+      planPriceId: starterPriceAnnual.id,
+      planCodeSnapshot: "STARTER",
+      planNameSnapshot: "Starter (Annual)",
+      billingInterval: "ANNUAL",
+      amountSatang: 299000,
+      taxSatang: 0,
+      netAmountSatang: 299000,
+      currency: "THB",
+      status: "APPROVED",
+      paymentMethod: "BANK_TRANSFER",
+      notes: "ชำระค่าบริการแพ็กเกจ Starter รายปี",
+      expiresAt: new Date(now.getTime() + 7 * 24 * 3600 * 1000),
+      reviewedAt: now,
+      reviewedByUserId: superAdmin.id,
+    },
+  });
+
+  // Create sample receipt document
+  await prisma.billingDocument.create({
+    data: {
+      documentNumber: "REC-202610-0001",
+      documentType: "RECEIPT",
+      organizationId: coopOrg.id,
+      billingOrderId: coopOrder.id,
+      title: "ใบยืนยันการชำระเงินค่าบริการ PdhFeedback Starter (รายปี)",
+      status: "VALID",
+      amountSatang: 299000,
+      taxSatang: 0,
+      netAmountSatang: 299000,
+      customerName: "สหกรณ์ออมทรัพย์โรงพยาบาลปทุมธานี จำกัด",
+      customerAddress: "123/9 ตึกอำนวยการ รพ.ปทุมธานี อ.เมือง จ.ปทุมธานี 12000",
+      customerTaxId: "0994000123456",
+      issuedAt: now,
+    },
+  });
+
+  // Dental Org: FREE Subscription
+  await prisma.subscription.create({
+    data: {
+      organizationId: dentalOrg.id,
+      planId: freePlan.id,
+      status: "ACTIVE",
+      billingInterval: "MONTHLY",
+      currentPeriodStart: now,
+      currentPeriodEnd: new Date(now.getFullYear() + 10, now.getMonth(), now.getDate()), // perpetual free
+      anchorDay: now.getDate(),
+    },
+  });
+
+  await prisma.billingProfile.create({
+    data: {
+      organizationId: dentalOrg.id,
+      companyName: "คลินิกทันตกรรมยิ้มสดใส",
+      taxId: null,
+      branchName: "สาขาหลัก",
+      address: "55 ถนนรังสิต-ปทุมธานี ต.ประชาธิปัตย์ อ.ธัญบุรี จ.ปทุมธานี 12130",
+      contactName: "ทพญ.พิชชาภา สดใส",
+      contactEmail: "owner.dental@pdhfeedback.local",
+      contactPhone: "089-123-4567",
+    },
+  });
+
   console.log("✅ Database seeding completed successfully!");
   console.log("----------------------------------------------------------------");
   console.log("Demo Accounts Available:");
@@ -567,6 +1039,7 @@ async function main() {
   console.log("3. Pharmacy Manager:     manager.pharm@pdhfeedback.local / Pharm@2026");
   console.log("4. Hospital Viewer:      viewer.hospital@pdhfeedback.local / Viewer@2026");
   console.log("5. Cooperative Owner:    owner.coop@pdhfeedback.local / Coop@2026");
+  console.log("6. Dental Clinic Owner:  owner.dental@pdhfeedback.local / Dental@2026 (FREE Tier)");
   console.log("----------------------------------------------------------------");
 }
 

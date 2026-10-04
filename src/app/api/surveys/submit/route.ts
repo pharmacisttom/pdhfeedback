@@ -136,18 +136,12 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Quota check: Monthly responses quota
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthlyCount = await prisma.response.count({
-      where: {
-        organizationId: organization.id,
-        submittedAt: { gte: startOfMonth },
-      },
-    });
-
-    if (monthlyCount >= organization.maxMonthlyResponses) {
+    // 3. Quota check: Monthly responses quota using Subscription anchor window
+    const { getOrganizationSubscription } = await import("@/lib/billing");
+    const subInfo = await getOrganizationSubscription(organization.id);
+    if (subInfo && subInfo.remainingResponses <= 0) {
       return NextResponse.json(
-        { error: "ขออภัย องค์กรนี้ถึงขีดจำกัดการรับคำตอบประจำเดือนตามแพ็กเกจแล้ว" },
+        { error: "ขออภัย องค์กรนี้ถึงขีดจำกัดการรับคำตอบประจำเดือนตามแพ็กเกจแล้ว กรุณาติดต่อผู้ดูแลระบบเพื่ออัปเกรดแพ็กเกจ" },
         { status: 403 }
       );
     }
@@ -176,8 +170,12 @@ export async function POST(req: Request) {
     let overallRating: number | null = null;
     let npsScore: number | null = null;
 
+    // Filter answers to only valid questions defined in this published survey version
+    const validQuestionIds = new Set(surveyVersion.questions.map((q) => q.id));
+    const validAnswers = answers.filter((a) => validQuestionIds.has(a.questionId));
+
     for (const q of surveyVersion.questions) {
-      const ans = answers.find((a) => a.questionId === q.id);
+      const ans = validAnswers.find((a) => a.questionId === q.id);
       if (ans && typeof ans.ratingValue === "number") {
         if (q.isOverallCSAT || (q.type === "RATING_1_5" && !overallRating)) {
           overallRating = ans.ratingValue;
@@ -205,10 +203,10 @@ export async function POST(req: Request) {
         },
       });
 
-      // Save answers
-      if (answers.length > 0) {
+      // Save valid answers
+      if (validAnswers.length > 0) {
         await tx.responseAnswer.createMany({
-          data: answers.map((a) => ({
+          data: validAnswers.map((a) => ({
             responseId: response.id,
             questionId: a.questionId,
             ratingValue: a.ratingValue ?? null,

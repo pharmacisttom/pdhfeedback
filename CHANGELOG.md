@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-10-04
+
+### Added
+- **SaaS Packages & Pricing Engine**:
+  - Seeded 5 standard tiers: `Free` (฿0), `Starter` (฿299/mo or ฿2,990/yr), `Professional` (฿799/mo or ฿7,990/yr), `Business` (฿1,990/mo or ฿19,900/yr), and `Enterprise` (Custom quote).
+  - All monetary calculations strictly performed on the server using integer satang (`priceSatang`, `amountSatang`, `netAmountSatang`) to prevent floating-point calculation errors.
+  - Price snapshot preservation: orders preserve `planCodeSnapshot`, `planNameSnapshot`, and `amountSatang` at the moment of order creation.
+  - Public Pricing page (`/pricing`) with interactive Monthly/Annual billing switcher, ~17% annual discount banner (2 months free), quota meters, feature matrix, and FAQ.
+- **Subscriptions & Quota Lifecycle**:
+  - Support for `ACTIVE`, `PENDING_PAYMENT`, `UNDER_REVIEW`, `PAST_DUE`, `CANCELED`, and `EXPIRED` subscription states.
+  - Monthly response quota resets based on the organization's subscription anchor day (`anchorDay`) even for annual subscriptions.
+  - Leap year and end-of-month clamping algorithm (Feb 28/29, Apr 30, etc.) with comprehensive unit test coverage.
+  - Quota enforcement in `/api/surveys/submit` preventing responses beyond monthly allocation.
+- **Manual Bank Transfer & PromptPay QR Billing**:
+  - Platform bank transfer instructions with configurable account number, bank name, and account holder.
+  - EMVCo standard PromptPay QR Code generator (`generatePromptPayPayload`) with AID `A000000677010111`, CRC16-CCITT checksum, and dynamic QR support with exact satang amount.
+  - Payment slip upload with private server-side storage in `storage/evidence/`, file signature and MIME type verification (`image/jpeg`, `image/png`, `image/webp`, `application/pdf`), and 5MB limit.
+  - Private authorized download endpoint (`/api/billing/evidence/[evidenceId]`) restricted to tenant owners/admins and platform billing admins.
+  - Platform Admin review and approval endpoint (`/api/billing/review`) with atomic transaction updating subscription period, status, and generating electronic receipt documents.
+  - Printable official payment confirmation receipt (`/api/billing/receipt/[orderId]`) with document numbers, organization details, tax ID, and browser print styles.
+- **Server-Side Feature Entitlements**:
+  - Central feature catalogue (`src/lib/entitlements.ts`) and plan-feature matrix.
+  - Server-side feature checks guarding XLSX exports (`/api/export`), custom questions, conditional logic, and branding.
+  - Dynamic "Powered by Tomvis" footer visibility based on the `hide_powered_by` entitlement (hidden on Business & Enterprise, visible on Free/Starter/Pro).
+- **Consoles & Testing**:
+  - Organization Plan & Usage console (`/[orgSlug]/plan`) with live quota meters, renewal dates, order modal, slip upload preview, and receipt downloads.
+  - Platform Billing console (`/platform/billing`) with Cash collected, MRR, ARR, and pending payment review queue.
+  - Extended Vitest suite with 27 unit & integration tests covering satang arithmetic, leap years, PromptPay standard, and tenant isolation.
+
 ## [1.0.0] - 2026-10-04
 
 ### Added

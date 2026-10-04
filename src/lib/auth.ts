@@ -134,3 +134,20 @@ export async function getSession(): Promise<UserContext | null> {
     canViewContacts,
   };
 }
+
+export async function getAuthUser(req?: Request): Promise<{
+  id: string;
+  email: string;
+  fullName: string;
+  isPlatformAdmin: boolean;
+} | null> {
+  const session = await getSession();
+  if (!session) return null;
+  return {
+    id: session.userId,
+    email: session.email,
+    fullName: session.fullName,
+    isPlatformAdmin: session.isPlatformAdmin,
+  };
+}
+

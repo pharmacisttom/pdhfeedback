@@ -30,6 +30,15 @@ export async function GET(req: Request) {
 
     if (!org) return new Response("Organization not found", { status: 404 });
 
+    const format = (searchParams.get("format") || "csv").toLowerCase();
+    if (format === "xlsx") {
+      const { requireFeature } = await import("@/lib/billing");
+      const featCheck = await requireFeature(org.id, "xlsx_export");
+      if (!featCheck.allowed) {
+        return new Response(featCheck.error || "แพ็กเกจปัจจุบันไม่รองรับการส่งออกไฟล์ Excel (XLSX) กรุณาอัปเกรดแพ็กเกจ", { status: 403 });
+      }
+    }
+
     const { startDate, endDate } = getDateRangePreset(rangePreset);
 
     const where: any = {

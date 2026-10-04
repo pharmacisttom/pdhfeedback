@@ -15,6 +15,7 @@ import {
   Activity,
   LogOut,
   Layers,
+  CreditCard,
 } from "lucide-react";
 
 interface OrgItem {
@@ -98,6 +99,13 @@ export default function PlatformClient({
         </div>
 
         <div className="flex items-center gap-4">
+          <Link
+            href="/platform/billing"
+            className="px-3.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+          >
+            <CreditCard className="w-4 h-4" />
+            <span>ระบบการเงิน & สมาชิก</span>
+          </Link>
           <div className="text-right hidden sm:block text-xs">
             <span className="font-bold text-white block">{adminUser.fullName}</span>
             <span className="text-slate-400 font-mono text-[10px]">{adminUser.email}</span>

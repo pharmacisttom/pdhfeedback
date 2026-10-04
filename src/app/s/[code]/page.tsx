@@ -97,6 +97,10 @@ export default async function PublicSurveyPage({ params, searchParams }: Props) 
     // Detailed validation happens during submission with tokenHash
   }
 
+  const { getOrganizationSubscription } = await import("@/lib/billing");
+  const subInfo = await getOrganizationSubscription(organization.id);
+  const hidePoweredBy = subInfo?.hasFeature("hide_powered_by") ?? false;
+
   return (
     <RespondentSurveyClient
       publicCode={code}
@@ -105,6 +109,7 @@ export default async function PublicSurveyPage({ params, searchParams }: Props) 
       surveyVersion={surveyVersion}
       invitationToken={invitationToken}
       isKioskMode={isKioskMode}
+      hidePoweredBy={hidePoweredBy}
     />
   );
 }

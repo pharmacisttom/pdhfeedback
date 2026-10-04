@@ -39,6 +39,12 @@ export default function HomePage() {
 
           <div className="flex items-center gap-3">
             <Link
+              href="/pricing"
+              className="text-xs sm:text-sm font-semibold text-slate-700 hover:text-teal-700 px-3 py-2 transition-colors"
+            >
+              แพ็กเกจและราคา
+            </Link>
+            <Link
               href="/s/pdh-reg-opd"
               target="_blank"
               className="hidden md:inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-3.5 py-2 rounded-xl transition-all"

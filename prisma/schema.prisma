@@ -55,6 +55,10 @@ model Organization {
   exportJobs          ExportJob[]
   apiKeys             ApiKey[]
   auditLogs           AuditLog[]
+  subscription        Subscription?
+  billingOrders       BillingOrder[]
+  billingDocuments    BillingDocument[]
+  billingProfile      BillingProfile?
 }
 
 model Membership {
@@ -439,3 +443,184 @@ model AuditLog {
   @@index([organizationId, timestamp])
   @@index([userId])
 }
+
+// -----------------------------------------------------------------------------
+// Billing, Subscriptions, Packages & Quotas
+// -----------------------------------------------------------------------------
+
+model Plan {
+  id                   String         @id @default(cuid())
+  code                 String         @unique // FREE, STARTER, PROFESSIONAL, BUSINESS, ENTERPRISE
+  name                 String
+  description          String?
+  displayOrder         Int            @default(0)
+  isActive             Boolean        @default(true)
+  maxServicePoints     Int            @default(1)
+  maxMembers           Int            @default(1)
+  maxActiveSurveys     Int            @default(1)
+  monthlyResponseQuota Int            @default(100)
+  features             String         @db.Text // JSON array of enabled feature keys
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  prices               PlanPrice[]
+  subscriptions        Subscription[]
+  billingOrders        BillingOrder[]
+}
+
+model PlanPrice {
+  id              String         @id @default(cuid())
+  planId          String
+  billingInterval String         // MONTHLY, ANNUAL
+  priceSatang     Int            // in Satang (e.g., 29900 = 299 THB, 299000 = 2,990 THB)
+  currency        String         @default("THB")
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  plan            Plan           @relation(fields: [planId], references: [id], onDelete: Cascade)
+  billingOrders   BillingOrder[]
+
+  @@unique([planId, billingInterval])
+}
+
+model Subscription {
+  id                         String        @id @default(cuid())
+  organizationId             String        @unique
+  planId                     String
+  status                     String        @default("ACTIVE") // ACTIVE, PENDING_PAYMENT, PAST_DUE, SUSPENDED, CANCELED, EXPIRED
+  billingInterval            String        @default("MONTHLY") // MONTHLY, ANNUAL
+  currentPeriodStart         DateTime      @default(now())
+  currentPeriodEnd           DateTime
+  cancelAtPeriodEnd          Boolean       @default(false)
+  canceledAt                 DateTime?
+  anchorDay                  Int           @default(1) // Day of month (1-31) for monthly quota reset
+  lastQuotaResetAt           DateTime      @default(now())
+  
+  // Custom Overrides (For Enterprise or Admin exceptions)
+  customServicePointsLimit   Int?
+  customMembersLimit         Int?
+  customSurveysLimit         Int?
+  customMonthlyResponseQuota Int?
+  customFeatures             String?       @db.Text
+  adminOverrideReason        String?
+  adminOverrideExpiresAt     DateTime?
+  
+  createdAt                  DateTime      @default(now())
+  updatedAt                  DateTime      @updatedAt
+
+  organization               Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan                       Plan          @relation(fields: [planId], references: [id])
+  usagePeriods               UsagePeriod[]
+
+  @@index([status])
+}
+
+model UsagePeriod {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  periodStart    DateTime
+  periodEnd      DateTime
+  responseCount  Int          @default(0)
+  createdAt      DateTime     @default(now())
+
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId, periodStart])
+}
+
+model BillingOrder {
+  id                String            @id @default(cuid())
+  orderNumber       String            @unique // ORD-202610-0001
+  organizationId    String
+  planId            String
+  planPriceId       String?
+  planCodeSnapshot  String
+  planNameSnapshot  String
+  billingInterval   String            // MONTHLY, ANNUAL
+  amountSatang      Int               // Base amount
+  taxSatang         Int               @default(0)
+  netAmountSatang   Int               // Total payable
+  currency          String            @default("THB")
+  status            String            @default("PENDING_PAYMENT") // PENDING_PAYMENT, UNDER_REVIEW, APPROVED, REJECTED, EXPIRED, CANCELED
+  paymentMethod     String            @default("BANK_TRANSFER") // BANK_TRANSFER, PROMPTPAY
+  notes             String?
+  expiresAt         DateTime
+  reviewedAt        DateTime?
+  reviewedByUserId  String?
+  rejectionReason   String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan              Plan              @relation(fields: [planId], references: [id])
+  planPrice         PlanPrice?        @relation(fields: [planPriceId], references: [id])
+  paymentEvidence   PaymentEvidence?
+  billingDocuments  BillingDocument[]
+
+  @@index([organizationId, status])
+}
+
+model PaymentEvidence {
+  id                 String       @id @default(cuid())
+  billingOrderId     String       @unique
+  fileKey            String       // Relative storage path: private/evidence/[id]
+  fileName           String
+  fileSize           Int
+  mimeType           String
+  transferredAt      DateTime?
+  amountSatang       Int?
+  userNotes          String?
+  uploadedByUserId   String?
+  createdAt          DateTime     @default(now())
+
+  billingOrder       BillingOrder @relation(fields: [billingOrderId], references: [id], onDelete: Cascade)
+}
+
+model BillingDocument {
+  id              String       @id @default(cuid())
+  documentNumber  String       @unique // INV-202610-0001 or REC-202610-0001
+  documentType    String       // INVOICE, RECEIPT
+  organizationId  String
+  billingOrderId  String
+  title           String
+  status          String       @default("VALID") // VALID, VOID
+  amountSatang    Int
+  taxSatang       Int          @default(0)
+  netAmountSatang Int
+  customerName    String
+  customerAddress String?
+  customerTaxId   String?
+  issuedAt        DateTime     @default(now())
+  createdAt       DateTime     @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  billingOrder    BillingOrder @relation(fields: [billingOrderId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model BillingProfile {
+  id              String       @id @default(cuid())
+  organizationId  String       @unique
+  companyName     String
+  taxId           String?
+  branchName      String?      @default("สำนักงานใหญ่")
+  address         String?
+  contactName     String?
+  contactEmail    String?
+  contactPhone    String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model PlatformSetting {
+  id              String       @id @default(cuid())
+  key             String       @unique
+  value           String       @db.Text
+  description     String?
+  updatedAt       DateTime     @updatedAt
+}
+

@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   ExternalLink,
   Layers,
+  CreditCard,
 } from "lucide-react";
 
 interface OrgInfo {
@@ -75,6 +76,7 @@ export default function OrgConsoleShell({
     { label: "รายการคำตอบ", href: `/${currentOrg.slug}/responses`, icon: MessageSquare },
     { label: "ติดตามข้อเสนอแนะ", href: `/${currentOrg.slug}/feedback`, icon: LifeBuoy },
     { label: "รายงานและส่งออก", href: `/${currentOrg.slug}/reports`, icon: FileSpreadsheet },
+    { label: "แพ็กเกจและการใช้งาน", href: `/${currentOrg.slug}/plan`, icon: CreditCard },
     { label: "ทีมงานและสิทธิ์", href: `/${currentOrg.slug}/team`, icon: Users },
     { label: "ตั้งค่าองค์กร", href: `/${currentOrg.slug}/settings`, icon: Settings },
   ];

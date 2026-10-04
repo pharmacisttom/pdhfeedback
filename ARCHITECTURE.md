@@ -108,3 +108,6 @@
 - **Phase 6: Platform Super Admin & Organization Settings** (Plan quotas, branding, audit logs)
 - **Phase 7: Developer API & Background Job Architecture** (V1 API, webhook triggers, token authentication)
 - **Phase 8: Comprehensive Testing, Deployment Configuration & Deliverables** (Vitest unit/integration tests, Docker Compose, Nginx, VPS guide, screenshots)
+- **Phase 9: SaaS Packages, Monthly/Annual Subscriptions, Billing & Feature Entitlements** (Free, Starter, Professional, Business, Enterprise, integer satang price snapshots, EMVCo PromptPay QR, bank transfer with private slip verification, platform billing review console, atomic activations, printable electronic receipts, monthly anchor-reset response quota, and server-side feature gating)
+
+*พัฒนาต่อจนจบ และสร้างแพ็คเก็จ สำหรับใช้งานในฟีเจอร์ที่เยอะขึ้นและ ระบบที่มากกว่าเดิม*
